@@ -1,0 +1,22 @@
+# Composer — vendor/ is built fresh in CI (see .github/workflows/release.yml)
+# from the committed composer.lock, so exact versions stay reproducible
+# without bloating the git history with third-party library code.
+/vendor/
+
+# Node (PressShip, if run locally)
+/node_modules/
+
+# Build output
+/*.zip
+/build/
+/dist/
+
+# Local environment / editor
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log

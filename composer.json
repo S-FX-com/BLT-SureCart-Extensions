@@ -1,0 +1,38 @@
+{
+    "name": "s-fx/blt-surecart-extensions",
+    "description": "Umbrella extension plugin adding modular extensions to the SureCart Ecommerce plugin for WordPress.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "S-FX.com Small Business Solutions",
+            "homepage": "https://s-fx.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "yahnis-elsts/plugin-update-checker": "^5.4",
+        "woocommerce/action-scheduler": "^3.9"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.9",
+        "wp-coding-standards/wpcs": "^3.1",
+        "phpcompatibility/phpcompatibility-wp": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "BLT\\SCE\\": "src/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "platform": {
+            "php": "7.4"
+        }
+    },
+    "scripts": {
+        "lint": "phpcs"
+    }
+}
