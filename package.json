@@ -1,0 +1,13 @@
+{
+  "name": "blt-surecart-extensions",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Build/packaging tooling for the BLT SureCart Extensions WordPress plugin.",
+  "scripts": {
+    "verify": "pressship verify .",
+    "pack": "pressship pack ."
+  },
+  "devDependencies": {
+    "pressship": "^0.2.2"
+  }
+}

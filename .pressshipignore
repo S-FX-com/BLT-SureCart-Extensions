@@ -1,0 +1,18 @@
+# Additional exclusions for `pressship pack`/`pressship verify`, on top
+# of PressShip's own defaults (.git, .github, node_modules, dist, build,
+# coverage, tests, *.log, *.zip — see tasks/00-discovery.md §F).
+#
+# This plugin ships to client sites via a private GitHub Release zip
+# (see .github/workflows/release.yml), not the WordPress.org directory —
+# PressShip is used here only for its readme/Plugin Check linting and zip
+# packaging, not its SVN submit/release commands.
+
+composer.json
+composer.lock
+package.json
+package-lock.json
+phpcs.xml.dist
+tasks/
+CLAUDE.md
+AGENTS.md
+README.md

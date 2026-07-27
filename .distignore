@@ -1,0 +1,26 @@
+# Files excluded from the release zip built by
+# .github/workflows/release.yml. This is intentionally separate from
+# .gitignore — vendor/ is gitignored (rebuilt in CI) but MUST ship in the
+# zip, while composer.json/tasks/docs are committed but must NOT ship.
+.git
+.github
+.gitignore
+.distignore
+.pressshipignore
+.editorconfig
+node_modules
+build
+dist
+tests
+tasks
+CLAUDE.md
+AGENTS.md
+README.md
+composer.json
+composer.lock
+package.json
+package-lock.json
+phpcs.xml
+phpcs.xml.dist
+*.zip
+.DS_Store
