@@ -152,6 +152,17 @@ final class Module implements ModuleInterface {
 	}
 
 	/**
+	 * Called by the registry when the module is enabled but its
+	 * requirements (e.g. the Shippo token) are unmet: keep the settings
+	 * screen reachable so the token can actually be entered.
+	 *
+	 * @return void
+	 */
+	public function boot_admin() {
+		( new SettingsPage() )->hooks();
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	public function boot() {

@@ -4,16 +4,18 @@ Tags: surecart, shipping, shippo, fulfillment, ecommerce
 Requires at least: 6.4
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Requires Plugins: surecart
 
-Umbrella extension plugin adding modular capabilities to SureCart. This release ships one module: Shippo Fulfillment.
+Umbrella extension plugin adding modular capabilities to SureCart. Modules: Shippo Fulfillment, Restrict Price by Role, Make an Offer.
 
 == Description ==
 
 BLT SureCart Extensions is a private plugin by S-FX.com Small Business Solutions, built for deployment across multiple SureCart-powered client sites. It is not distributed via the WordPress.org plugin directory; updates are delivered from private GitHub Releases.
+
+Each module is independently toggleable from **SC Extensions → Modules**. Enabling a module exposes its own admin screen(s) under the SC Extensions menu; disabling it removes every hook the module registers.
 
 **Shippo Fulfillment module**
 
@@ -22,6 +24,21 @@ BLT SureCart Extensions is a private plugin by S-FX.com Small Business Solutions
 * Keeps shipment status synced as the package moves — shipped, in transit, delivered, exception — via Shippo's tracking webhook plus a reconciliation sweep for anything a webhook missed.
 
 This module never touches checkout rate calculation or order totals — SureCart's own subtotal-banded/weight-banded shipping rates remain in full control of what the customer is charged. Everything this module does happens strictly after payment.
+
+**Restrict Price by Role module**
+
+* Assign WordPress roles to individual SureCart prices from a matrix screen (SC Extensions → Price Restrictions).
+* Restricted prices are hidden on the frontend (server-side block filtering + CSS + a MutationObserver for dynamically rendered SureCart components).
+* Checkout is validated server-side, so a restricted price can't be purchased even with JS disabled or via a direct API call.
+* Consolidated from the standalone "SureCart - Restrict Price by User Role" plugin; existing restriction data is reused as-is (same option key) — deactivate the standalone plugin after enabling this module.
+
+**Make an Offer module**
+
+* eBay-style offers on SureCart product pages via the `[sc_make_an_offer product_id="…"]` shortcode.
+* The customer's card is vaulted through Stripe.js (SetupIntent) — card data never touches the server; the card is only charged if the offer is accepted.
+* Accept, decline, or counter offers from SC Extensions → Offers; counter-offers email the customer signed accept/decline links.
+* Optional minimum-offer percentage, auto-accept threshold, offer expiry (hourly sweep), and per-customer/product duplicate handling.
+* Each accepted offer is recorded as a real SureCart order (a manually-paid checkout at the accepted amount, using SureCart's own "pay what you want" ad-hoc pricing), so orders, purchases, customer records — and the Shippo Fulfillment module — all pick it up. Requires a SureCart API token (Offer Settings). The Stripe charge remains the actual payment.
 
 Every guardrail below ships **on** by default except auto-purchase, which ships **off**:
 
@@ -54,6 +71,12 @@ The purchase job retries with exponential backoff, up to 5 attempts, then marks 
 A reconciliation sweep re-checks any shipment stuck in a non-terminal status every 15 minutes (configurable threshold, default 6 hours before a shipment is considered "stuck").
 
 == Changelog ==
+
+= 0.2.0 =
+* New module: Restrict Price by Role (consolidated from the standalone SureCart-RestrictPriceByRole plugin; reuses its stored restriction data).
+* New module: Make an Offer (implements the Blt-SureCart-Offers spec: vaulted-card offers, accept/decline/counter, auto-accept threshold, expiration sweep).
+* Make an Offer: accepted offers are back-filled as manually-paid SureCart orders via ad-hoc pricing, so they flow into SureCart reporting and fulfillment.
+* Modules with unmet requirements now still expose their settings screens so API keys can be entered.
 
 = 0.1.0 =
 * Initial release. Shippo Fulfillment module: label purchase, SureCart fulfillment write-back, tracking status sync, reconciliation sweep, full guardrail set, module registry for future extensions.

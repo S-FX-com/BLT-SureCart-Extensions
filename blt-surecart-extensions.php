@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       BLT SureCart Extensions
  * Plugin URI:        https://s-fx.com/plugins/blt-surecart-extensions
- * Description:       Umbrella extension plugin adding modular capabilities to SureCart. Ships with a Shippo Fulfillment module: purchases shipping labels after payment and keeps tracking status in sync.
- * Version:           0.1.0
+ * Description:       Umbrella extension plugin adding modular capabilities to SureCart. Modules (each independently toggleable): Shippo Fulfillment, Restrict Price by Role, and Make an Offer.
+ * Version:           0.2.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Requires Plugins:  surecart
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'BLT_SCE_VERSION', '0.1.0' );
+define( 'BLT_SCE_VERSION', '0.2.0' );
 define( 'BLT_SCE_FILE', __FILE__ );
 define( 'BLT_SCE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'BLT_SCE_URL', plugin_dir_url( __FILE__ ) );

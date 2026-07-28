@@ -9,7 +9,9 @@
 namespace BLT\SCE;
 
 use BLT\SCE\Db\Schema;
+use BLT\SCE\Modules\MakeAnOffer\Module as MakeAnOfferModule;
 use BLT\SCE\Modules\ModuleRegistry;
+use BLT\SCE\Modules\RestrictPriceByRole\Module as RestrictPriceByRoleModule;
 use BLT\SCE\Modules\ShippoFulfillment\Module as ShippoFulfillmentModule;
 use BLT\SCE\Support\Logger;
 use BLT\SCE\Support\Scheduler;
@@ -83,6 +85,8 @@ final class Plugin {
 		// registering here does not mean it is active; ModuleRegistry
 		// checks the stored enabled/disabled state before booting it.
 		$this->modules->register( new ShippoFulfillmentModule( $this->logger ) );
+		$this->modules->register( new RestrictPriceByRoleModule( $this->logger ) );
+		$this->modules->register( new MakeAnOfferModule( $this->logger ) );
 		$this->modules->boot_enabled();
 
 		if ( is_admin() ) {
