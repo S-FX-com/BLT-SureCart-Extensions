@@ -38,7 +38,7 @@ This module never touches checkout rate calculation or order totals — SureCart
 * The customer's card is vaulted through Stripe.js (SetupIntent) — card data never touches the server; the card is only charged if the offer is accepted.
 * Accept, decline, or counter offers from SC Extensions → Offers; counter-offers email the customer signed accept/decline links.
 * Optional minimum-offer percentage, auto-accept threshold, offer expiry (hourly sweep), and per-customer/product duplicate handling.
-* Note: an accepted offer is charged directly through Stripe and recorded against the offer — it does not create a SureCart order in this release.
+* Each accepted offer is recorded as a real SureCart order (a manually-paid checkout at the accepted amount, using SureCart's own "pay what you want" ad-hoc pricing), so orders, purchases, customer records — and the Shippo Fulfillment module — all pick it up. Requires a SureCart API token (Offer Settings). The Stripe charge remains the actual payment.
 
 Every guardrail below ships **on** by default except auto-purchase, which ships **off**:
 
@@ -75,6 +75,7 @@ A reconciliation sweep re-checks any shipment stuck in a non-terminal status eve
 = 0.2.0 =
 * New module: Restrict Price by Role (consolidated from the standalone SureCart-RestrictPriceByRole plugin; reuses its stored restriction data).
 * New module: Make an Offer (implements the Blt-SureCart-Offers spec: vaulted-card offers, accept/decline/counter, auto-accept threshold, expiration sweep).
+* Make an Offer: accepted offers are back-filled as manually-paid SureCart orders via ad-hoc pricing, so they flow into SureCart reporting and fulfillment.
 * Modules with unmet requirements now still expose their settings screens so API keys can be entered.
 
 = 0.1.0 =

@@ -90,6 +90,21 @@ Fulfillment items: exact field names are `line_item` (UUID) + `quantity` (int) �
 
 ---
 
+## G. Creating a SureCart order for an accepted offer (Make an Offer module)
+
+Question: can an accepted offer (already charged via the module's own Stripe integration) become a real SureCart order? Answered from `developer.surecart.com` (2026-07-28):
+
+- **Orders cannot be created directly.** The Orders API documents only `list` and `retrieve` (`api-reference/orders/*.md` — no `create.md` exists in the docs index). Orders are only ever created *from checkouts*. The old scaffold suggestion of `\SureCart\Models\Order::create([...])` is a dead end.
+- **No authorize-only / manual-capture switch exists on checkouts.** The checkout create schema (`api-reference/checkouts/create.md`) has no `capture_method`, `capture_behavior`, `manual_capture`, or `authorize_only` field. Payment intents *do* have a `requires_capture` status value and a `PATCH /v1/payment_intents/{id}/capture` endpoint (`api-reference/payment-intents/capture.md`), but nothing documented lets a third party put a checkout into that state — so "hold the native checkout payment until the merchant approves" cannot be built on documented surface. (Worth periodically re-checking / asking SureCart support; if they ever expose it, the offer flow could move fully native.)
+- **The verified path is a manually-paid checkout:**
+  1. `POST /v1/prices`, body wrapped as `{"price": {...}}`. `ad_hoc`: *"Whether or not this price accepts ad hoc amounts – also known as custom or user-defined amounts."* With `ad_hoc: true`, `amount` is not required; `ad_hoc_min_amount`/`ad_hoc_max_amount` exist (cents). `product_id` required; `name` optional. This is the same mechanism as SureCart's "pay what you want"/donations feature.
+  2. `POST /v1/checkouts`, body `{"checkout": {...}}`. Line items: `{ price, quantity, ad_hoc_amount, variant }` (`ad_hoc_amount` integer cents). `email`: *"If customers exists with this email, the most recently active/updated customer will be associated."* `metadata` (key/value) confirmed writable — used to stamp the offer ID + Stripe PaymentIntent ID for audit.
+  3. `PATCH /v1/checkouts/{id}/finalize` with query param `manual_payment=true` (*"Skip payment processor integration"*) and optional `manual_payment_method_id`.
+  4. `PATCH /v1/checkouts/{id}/manually_pay` — *"can only be performed on checkouts that have been finalized"*; marks the checkout paid, *"associated purchases and subscriptions will be created"*, and the response carries the new order UUID (`order` field).
+- **Manual payment methods:** `POST /v1/manual_payment_methods`, body `{"manual_payment_method": {...}}`, only `name` required (`description`/`instructions` optional) — created once so these orders carry a "Make an Offer (charged via Stripe)" payment label.
+- **Auth:** these platform endpoints take a Bearer API token created by the merchant in the SureCart dashboard. The PHP models docs (`documentation/php-models.md`) only document CRUD (`save`/`update`/`delete`) — the `finalize`/`manually_pay` verbs are **not** documented on models, so `Api\SureCartApiClient` calls the REST endpoints directly with the token instead of going through models. Calls run only inside Action Scheduler jobs, per rule 1.
+- **UNVERIFIED (flagged, handled defensively):** (a) whether an `archived: true` ad-hoc price can still be checked out via the API — the module leaves the price unarchived and names it clearly ("Accepted Offer — <product>"); it can be hidden from the storefront with the Restrict Price by Role module (the WP-side `surecart/checkout/validate` gate does not run for direct platform-API checkouts, so restriction doesn't block the back-fill). (b) Whether tax is computed on a manual-payment finalize — verify in test mode before relying on SureCart tax reports for offer orders.
+
 ## Net effect on the build
 
 - Order-paid trigger: `surecart/order_updated` WP hook, checked for `status === 'paid'`, per §A.

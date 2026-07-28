@@ -196,6 +196,7 @@ final class AdminPage {
 			'accept_queued'  => array( 'success', __( 'Acceptance queued — the card will be charged in the background and the offer will flip to Accepted once the payment succeeds.', 'blt-surecart-extensions' ) ),
 			'declined'       => array( 'success', __( 'Offer declined and the customer notified.', 'blt-surecart-extensions' ) ),
 			'countered'      => array( 'success', __( 'Counter-offer sent to the customer.', 'blt-surecart-extensions' ) ),
+			'order_queued'   => array( 'success', __( 'SureCart order creation queued — refresh in a moment to see the order ID.', 'blt-surecart-extensions' ) ),
 			'error'          => array( 'error', __( 'The action could not be completed.', 'blt-surecart-extensions' ) ),
 			'stripe_found'   => array( 'success', __( 'Stripe details detected from SureCart and saved.', 'blt-surecart-extensions' ) ),
 			'stripe_missing' => array( 'error', __( 'Could not detect Stripe details from SureCart — enter them manually below.', 'blt-surecart-extensions' ) ),
@@ -275,6 +276,7 @@ final class AdminPage {
 			__( 'Submitted', 'blt-surecart-extensions' )      => get_date_from_gmt( $offer->created_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ),
 			__( 'Expires', 'blt-surecart-extensions' )        => $offer->expires_at ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $offer->expires_at ) : '—',
 			__( 'Stripe PaymentIntent', 'blt-surecart-extensions' ) => $offer->stripe_pi_id ? $offer->stripe_pi_id : '—',
+			__( 'SureCart order', 'blt-surecart-extensions' ) => $offer->sc_order_id ? $offer->sc_order_id : '—',
 		);
 
 		echo '<table class="widefat striped" style="max-width:720px;"><tbody>';
@@ -284,6 +286,26 @@ final class AdminPage {
 		}
 
 		echo '</tbody></table>';
+
+		// Accepted but the SureCart order back-fill failed (or hasn't run):
+		// surface the error and a retry action.
+		if ( OfferPostType::STATUS_ACCEPTED === $offer->status && '' === $offer->sc_order_id && Settings::record_sc_order() ) {
+			if ( '' !== $offer->sc_order_error ) {
+				echo '<div class="notice notice-error"><p>' . esc_html(
+					sprintf(
+						/* translators: %s: SureCart API error message */
+						__( 'The SureCart order could not be created: %s', 'blt-surecart-extensions' ),
+						$offer->sc_order_error
+					)
+				) . '</p></div>';
+			}
+
+			printf(
+				'<p><a href="%s" class="button">%s</a></p>',
+				esc_url( self::action_url( $offer->id, 'record_order' ) ),
+				esc_html__( 'Create SureCart order now', 'blt-surecart-extensions' )
+			);
+		}
 
 		$open = in_array( $offer->status, array( OfferPostType::STATUS_PENDING, OfferPostType::STATUS_COUNTERED ), true );
 
@@ -332,7 +354,7 @@ final class AdminPage {
 		$offer_id = isset( $_REQUEST['offer_id'] ) ? (int) $_REQUEST['offer_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$verb     = isset( $_REQUEST['verb'] ) ? sanitize_key( wp_unslash( $_REQUEST['verb'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		if ( ! in_array( $verb, array( 'accept', 'decline', 'counter' ), true ) ) {
+		if ( ! in_array( $verb, array( 'accept', 'decline', 'counter', 'record_order' ), true ) ) {
 			wp_die( esc_html__( 'Unknown action.', 'blt-surecart-extensions' ) );
 		}
 
@@ -346,6 +368,10 @@ final class AdminPage {
 			case 'decline':
 				$result = $this->manager->decline( $offer_id );
 				$notice = 'declined';
+				break;
+			case 'record_order':
+				$result = $this->manager->request_order_record( $offer_id );
+				$notice = 'order_queued';
 				break;
 			default:
 				$cents  = isset( $_POST['counter_amount'] ) ? Money::decimal_string_to_cents( sanitize_text_field( wp_unslash( $_POST['counter_amount'] ) ) ) : 0;
@@ -459,7 +485,7 @@ final class AdminPage {
 
 			<h2><?php esc_html_e( 'Stripe', 'blt-surecart-extensions' ); ?></h2>
 			<p class="description">
-				<?php esc_html_e( 'Offers vault the customer\'s card with Stripe and charge it on acceptance. Charges are made directly through this Stripe account — an accepted offer does not create a SureCart order.', 'blt-surecart-extensions' ); ?>
+				<?php esc_html_e( 'Offers vault the customer\'s card with Stripe and charge it on acceptance. Charges are made directly through this Stripe account; with order recording enabled below, each accepted offer is then recorded as a manually-paid SureCart order.', 'blt-surecart-extensions' ); ?>
 			</p>
 			<table class="form-table" role="presentation">
 				<tr>
@@ -485,6 +511,34 @@ final class AdminPage {
 					<td>
 						<input type="text" name="stripe_account_id" id="stripe_account_id" class="regular-text" value="<?php echo esc_attr( $settings['stripe_account_id'] ); ?>" placeholder="acct_…" />
 						<p class="description"><?php esc_html_e( 'Only needed when the keys above belong to a platform account and charges should run on a connected account (e.g. SureCart\'s connected Stripe account).', 'blt-surecart-extensions' ); ?></p>
+					</td>
+				</tr>
+			</table>
+
+			<h2><?php esc_html_e( 'SureCart order recording', 'blt-surecart-extensions' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'When enabled, every accepted offer is recorded in SureCart as a real order (created via a manually-paid checkout at the accepted amount), so orders, purchases, customer records, and fulfillment all see it. The Stripe charge above remains the actual payment; the SureCart order is marked as manually paid.', 'blt-surecart-extensions' ); ?>
+			</p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Record orders', 'blt-surecart-extensions' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="record_sc_order" value="1" <?php checked( ! empty( $settings['record_sc_order'] ) ); ?> />
+							<?php esc_html_e( 'Create a SureCart order for each accepted offer.', 'blt-surecart-extensions' ); ?>
+						</label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="surecart_api_token"><?php esc_html_e( 'SureCart API token', 'blt-surecart-extensions' ); ?></label></th>
+					<td>
+						<?php if ( Settings::sc_token_is_constant_defined() ) : ?>
+							<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
+							<p class="description"><?php esc_html_e( 'Defined via the BLT_SCE_SURECART_API_TOKEN constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
+						<?php else : ?>
+							<input type="password" autocomplete="new-password" name="surecart_api_token" id="surecart_api_token" class="regular-text" value="" placeholder="<?php echo '' === $settings['surecart_api_token'] ? esc_attr__( 'Created in the SureCart dashboard under API Tokens', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
+							<p class="description"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_SURECART_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+						<?php endif; ?>
 					</td>
 				</tr>
 			</table>
@@ -519,11 +573,16 @@ final class AdminPage {
 			'notify_email'           => isset( $_POST['notify_email'] ) ? sanitize_email( wp_unslash( $_POST['notify_email'] ) ) : '',
 			'stripe_publishable_key' => isset( $_POST['stripe_publishable_key'] ) ? sanitize_text_field( wp_unslash( $_POST['stripe_publishable_key'] ) ) : '',
 			'stripe_account_id'      => isset( $_POST['stripe_account_id'] ) ? sanitize_text_field( wp_unslash( $_POST['stripe_account_id'] ) ) : '',
+			'record_sc_order'        => ! empty( $_POST['record_sc_order'] ),
 		);
 
 		// Like the Shippo token: blank means "keep the current secret."
 		if ( ! Settings::secret_key_is_constant_defined() && ! empty( $_POST['stripe_secret_key'] ) ) {
 			$values['stripe_secret_key'] = sanitize_text_field( wp_unslash( $_POST['stripe_secret_key'] ) );
+		}
+
+		if ( ! Settings::sc_token_is_constant_defined() && ! empty( $_POST['surecart_api_token'] ) ) {
+			$values['surecart_api_token'] = sanitize_text_field( wp_unslash( $_POST['surecart_api_token'] ) );
 		}
 
 		Settings::save( $values );

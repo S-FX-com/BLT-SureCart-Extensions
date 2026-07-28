@@ -12,7 +12,7 @@ This build ships three modules, each independently toggleable from the Modules s
 
 - **Shippo Fulfillment** — purchases a Shippo shipping label after a SureCart order is paid, writes tracking back to SureCart, and keeps shipment status in sync. It does **not** touch checkout rate calculation or order totals — that's explicitly out of scope, permanently, not just for this build.
 - **Restrict Price by Role** — hides SureCart prices from users without an allowed WordPress role and rejects restricted prices at checkout. Consolidated from the standalone `SureCart-RestrictPriceByRole` repo; it deliberately keeps that plugin's `scrpbr_restrictions` option key so existing site data carries over with zero migration.
-- **Make an Offer** — eBay-style offers with a Stripe-vaulted card, charged off-session on acceptance. Implemented from the `Blt-SureCart-Offers` repo's scaffold spec (that repo contained no code). Deliberate v1 scope: an accepted offer does **not** create a SureCart order — SureCart's PHP order-creation API is unverified (see rule about `tasks/00-discovery.md` below); the Stripe PaymentIntent is the receipt.
+- **Make an Offer** — eBay-style offers with a Stripe-vaulted card, charged off-session on acceptance. Implemented from the `Blt-SureCart-Offers` repo's scaffold spec (that repo contained no code). After a successful charge, the offer is back-filled into SureCart as a real order via the manually-paid-checkout flow (`OrderRecorder` — ad_hoc price + create/finalize(manual)/manually_pay, all verified in `tasks/00-discovery.md` §G). Orders can't be created directly (SureCart's Orders API is list/retrieve only), and native checkouts expose no authorize-only switch, which is why the charge itself stays on the module's own Stripe integration.
 
 ## Before you touch anything: read `tasks/00-discovery.md`
 
@@ -44,8 +44,9 @@ src/Modules/                   ModuleRegistry + ModuleInterface — each module 
     OfferRepository.php           All sc_offer post/meta access lives here, nowhere else
     OfferManager.php              Every status transition; job handlers for capture/release/expire
     StripeService.php             Setup/verify/capture/release flows over Api\StripeClient
-    Settings.php                  Single serialized option + BLT_SCE_STRIPE_SECRET_KEY constant override
+    Settings.php                  Single serialized option + BLT_SCE_STRIPE_SECRET_KEY / BLT_SCE_SURECART_API_TOKEN constant overrides
     ProductCatalog.php            Transient-cached SureCart product/list-price lookup for validation
+    OrderRecorder.php             Back-fills accepted offers as manually-paid SureCart orders (job-only)
     EmailNotifier.php             All wp_mail() notifications, both directions
     AdminPage.php + OffersListTable.php   Offers screen, detail view, actions, settings, admin-bar badge
     Frontend.php                  [sc_make_an_offer] shortcode + Stripe.js modal form
@@ -54,6 +55,7 @@ src/Api/
   ShippoClient.php               All Shippo HTTP, logged, timed out, never called outside a job
   StripeClient.php               All Stripe HTTP, same conventions (no SDK; form-encoded; Stripe-Account aware)
   SureCartGateway.php             SureCart PHP models (Order, Fulfillment) — also synchronous, also job-only
+  SureCartApiClient.php           SureCart platform REST (Bearer token) for checkout verbs the models don't document
 src/Rest/
   ShippoWebhookController.php    Tracking webhook receiver + security
   OfferController.php            sc-offer/v1 customer endpoints (submit/confirm/counter-response)

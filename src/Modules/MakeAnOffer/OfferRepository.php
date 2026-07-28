@@ -36,6 +36,8 @@ final class OfferRepository {
 	const META_COUNTER_AMOUNT = '_sc_offer_counter_amount';
 	const META_PM_CONFIRMED   = '_sc_offer_pm_confirmed';
 	const META_CAPTURE_ERROR  = '_sc_offer_capture_error';
+	const META_FINAL_AMOUNT   = '_sc_offer_final_amount';
+	const META_ORDER_ERROR    = '_sc_offer_order_error';
 
 	/**
 	 * Create a new pending offer.
@@ -122,6 +124,8 @@ final class OfferRepository {
 			'counter_amount'     => (int) get_post_meta( $post->ID, self::META_COUNTER_AMOUNT, true ),
 			'pm_confirmed'       => (bool) get_post_meta( $post->ID, self::META_PM_CONFIRMED, true ),
 			'capture_error'      => (string) get_post_meta( $post->ID, self::META_CAPTURE_ERROR, true ),
+			'final_amount'       => (int) get_post_meta( $post->ID, self::META_FINAL_AMOUNT, true ),
+			'sc_order_error'     => (string) get_post_meta( $post->ID, self::META_ORDER_ERROR, true ),
 		);
 	}
 

@@ -7,12 +7,13 @@
  * is charged off-session inside an Action Scheduler job.
  *
  * Consolidated from the standalone sc-make-an-offer scaffold
- * (Blt-SureCart-Offers repo). Deliberate v1 scope note: an accepted
- * offer records the Stripe PaymentIntent as its receipt and does NOT
- * create a SureCart order — SureCart's PHP order-creation API is
- * undocumented and unverified, and inventing calls against it is
- * exactly what tasks/00-discovery.md forbids. The `_sc_offer_sc_order_id`
- * meta is reserved for when that call is verified.
+ * (Blt-SureCart-Offers repo). After a successful charge, the offer is
+ * back-filled into SureCart as a real order via the manually-paid
+ * checkout flow (OrderRecorder, endpoints verified in
+ * tasks/00-discovery.md §G) — orders can't be created directly
+ * (SureCart's Orders API is list/retrieve only), and native checkouts
+ * expose no authorize-only/manual-capture switch, which is why the
+ * charge itself stays on the module's own Stripe integration.
  *
  * This is the only file that touches WordPress hooks for this module —
  * everything else is plain, hook-free service classes.
@@ -22,6 +23,7 @@
 
 namespace BLT\SCE\Modules\MakeAnOffer;
 
+use BLT\SCE\Api\SureCartApiClient;
 use BLT\SCE\Modules\ModuleInterface;
 use BLT\SCE\Rest\OfferController;
 use BLT\SCE\Support\Logger;
@@ -76,10 +78,15 @@ final class Module implements ModuleInterface {
 		$this->logger     = $logger;
 		$this->repository = new OfferRepository();
 
-		$stripe = new StripeService( $this->repository, $logger );
-		$emails = new EmailNotifier();
+		$stripe   = new StripeService( $this->repository, $logger );
+		$emails   = new EmailNotifier();
+		$recorder = new OrderRecorder(
+			new SureCartApiClient( $logger, Settings::surecart_api_token() ),
+			$this->repository,
+			$logger
+		);
 
-		$this->manager         = new OfferManager( $this->repository, $stripe, $emails, $logger );
+		$this->manager         = new OfferManager( $this->repository, $stripe, $emails, $recorder, $logger );
 		$this->rest_controller = new OfferController( $this->repository, $stripe, $this->manager, new ProductCatalog(), $emails );
 	}
 
@@ -154,6 +161,7 @@ final class Module implements ModuleInterface {
 		add_action( OfferManager::HOOK_CAPTURE, array( $this->manager, 'process_capture' ), 10, 2 );
 		add_action( OfferManager::HOOK_RELEASE_PM, array( $this->manager, 'process_release_pm' ) );
 		add_action( OfferManager::HOOK_EXPIRE_SWEEP, array( $this->manager, 'process_expire_sweep' ) );
+		add_action( OfferManager::HOOK_RECORD_ORDER, array( $this->manager, 'process_record_order' ) );
 
 		add_action(
 			'init',

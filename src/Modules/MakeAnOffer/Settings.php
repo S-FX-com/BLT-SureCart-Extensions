@@ -45,6 +45,8 @@ final class Settings {
 			'stripe_secret_key'      => '',
 			'stripe_publishable_key' => '',
 			'stripe_account_id'      => '',
+			'record_sc_order'        => true,
+			'surecart_api_token'     => '',
 		);
 	}
 
@@ -124,6 +126,39 @@ final class Settings {
 	 */
 	public static function stripe_account_id() {
 		return (string) self::get( 'stripe_account_id' );
+	}
+
+	/**
+	 * Whether accepted offers should be recorded as manually-paid
+	 * SureCart orders.
+	 *
+	 * @return bool
+	 */
+	public static function record_sc_order() {
+		return (bool) self::get( 'record_sc_order' );
+	}
+
+	/**
+	 * Whether the SureCart API token comes from a wp-config constant.
+	 *
+	 * @return bool
+	 */
+	public static function sc_token_is_constant_defined() {
+		return defined( 'BLT_SCE_SURECART_API_TOKEN' ) && '' !== BLT_SCE_SURECART_API_TOKEN;
+	}
+
+	/**
+	 * The active SureCart API token — constant first, then the option.
+	 * Never exposed to the browser; only ever read server-side.
+	 *
+	 * @return string
+	 */
+	public static function surecart_api_token() {
+		if ( self::sc_token_is_constant_defined() ) {
+			return BLT_SCE_SURECART_API_TOKEN;
+		}
+
+		return (string) self::get( 'surecart_api_token' );
 	}
 
 	/**

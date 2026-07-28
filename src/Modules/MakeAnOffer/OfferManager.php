@@ -30,6 +30,7 @@ final class OfferManager {
 	const HOOK_CAPTURE      = 'blt_sce_offer_capture';
 	const HOOK_RELEASE_PM   = 'blt_sce_offer_release_pm';
 	const HOOK_EXPIRE_SWEEP = 'blt_sce_offer_expire_sweep';
+	const HOOK_RECORD_ORDER = 'blt_sce_offer_record_order';
 
 	/**
 	 * Repository.
@@ -53,6 +54,13 @@ final class OfferManager {
 	private $emails;
 
 	/**
+	 * SureCart order back-fill.
+	 *
+	 * @var OrderRecorder
+	 */
+	private $order_recorder;
+
+	/**
 	 * Logger.
 	 *
 	 * @var Logger
@@ -62,16 +70,18 @@ final class OfferManager {
 	/**
 	 * Constructor.
 	 *
-	 * @param OfferRepository $repository Offer repository.
-	 * @param StripeService   $stripe     Stripe flows.
-	 * @param EmailNotifier   $emails     Email notifications.
-	 * @param Logger          $logger     Shared logger.
+	 * @param OfferRepository $repository     Offer repository.
+	 * @param StripeService   $stripe         Stripe flows.
+	 * @param EmailNotifier   $emails         Email notifications.
+	 * @param OrderRecorder   $order_recorder SureCart order back-fill.
+	 * @param Logger          $logger         Shared logger.
 	 */
-	public function __construct( OfferRepository $repository, StripeService $stripe, EmailNotifier $emails, Logger $logger ) {
-		$this->repository = $repository;
-		$this->stripe     = $stripe;
-		$this->emails     = $emails;
-		$this->logger     = $logger;
+	public function __construct( OfferRepository $repository, StripeService $stripe, EmailNotifier $emails, OrderRecorder $order_recorder, Logger $logger ) {
+		$this->repository     = $repository;
+		$this->stripe         = $stripe;
+		$this->emails         = $emails;
+		$this->order_recorder = $order_recorder;
+		$this->logger         = $logger;
 	}
 
 	/**
@@ -139,6 +149,7 @@ final class OfferManager {
 		}
 
 		$this->repository->set_meta( $offer_id, OfferRepository::META_CAPTURE_ERROR, '' );
+		$this->repository->set_meta( $offer_id, OfferRepository::META_FINAL_AMOUNT, (int) $amount_cents );
 		$this->repository->set_status( $offer_id, OfferPostType::STATUS_ACCEPTED );
 
 		$this->logger->info(
@@ -150,6 +161,70 @@ final class OfferManager {
 		);
 
 		$this->emails->customer_accepted( $offer, (int) $amount_cents );
+
+		// Back-fill the SureCart order in its own job so a SureCart
+		// hiccup can't disturb the (already completed) charge, and so
+		// recording gets its own retry surface.
+		if ( Settings::record_sc_order() ) {
+			Scheduler::enqueue( self::HOOK_RECORD_ORDER, array( 'offer_id' => (int) $offer_id ) );
+		}
+	}
+
+	/**
+	 * Queue (or re-queue, from the offer detail screen) the SureCart
+	 * order back-fill for an already-accepted offer.
+	 *
+	 * @param int $offer_id Offer post ID.
+	 * @return true|\WP_Error
+	 */
+	public function request_order_record( $offer_id ) {
+		$offer = $this->repository->find( $offer_id );
+
+		if ( ! $offer || OfferPostType::STATUS_ACCEPTED !== $offer->status ) {
+			return new \WP_Error( 'blt_sce_offer_not_accepted', __( 'Only an accepted offer can be recorded as a SureCart order.', 'blt-surecart-extensions' ) );
+		}
+
+		if ( '' !== $offer->sc_order_id ) {
+			return new \WP_Error( 'blt_sce_offer_already_recorded', __( 'This offer already has a SureCart order.', 'blt-surecart-extensions' ) );
+		}
+
+		Scheduler::enqueue( self::HOOK_RECORD_ORDER, array( 'offer_id' => (int) $offer_id ) );
+
+		return true;
+	}
+
+	/**
+	 * Record-order job handler: create the manually-paid SureCart
+	 * checkout for an accepted offer. Failure is recorded on the offer
+	 * (visible + retryable in admin) and never affects the charge.
+	 *
+	 * @param int $offer_id Offer post ID.
+	 * @return void
+	 */
+	public function process_record_order( $offer_id ) {
+		$offer = $this->repository->find( $offer_id );
+
+		if ( ! $offer || OfferPostType::STATUS_ACCEPTED !== $offer->status || '' !== $offer->sc_order_id ) {
+			return;
+		}
+
+		$amount = $offer->final_amount > 0 ? $offer->final_amount : $offer->amount;
+		$result = $this->order_recorder->record( $offer, $amount );
+
+		if ( is_wp_error( $result ) ) {
+			$this->repository->set_meta( $offer_id, OfferRepository::META_ORDER_ERROR, $result->get_error_message() );
+			$this->logger->error(
+				'SureCart order back-fill failed.',
+				array(
+					'offer_id' => $offer_id,
+					'error'    => $result->get_error_message(),
+				)
+			);
+
+			return;
+		}
+
+		$this->repository->set_meta( $offer_id, OfferRepository::META_ORDER_ERROR, '' );
 	}
 
 	/**

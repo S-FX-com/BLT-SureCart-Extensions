@@ -45,6 +45,8 @@ $options = array(
 	'scrpbr_restrictions',
 	// Make an Offer module.
 	'sc_make_an_offer_settings',
+	'blt_sce_offer_sc_mpm_id',
+	'blt_sce_offer_sc_adhoc_prices',
 );
 
 foreach ( $options as $option ) {
