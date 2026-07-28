@@ -144,6 +144,17 @@ final class ModuleRegistry {
 						sprintf( 'Module "%s" not booted: unmet requirements.', $slug ),
 						array( 'unmet' => $unmet )
 					);
+
+					// An enabled module with unmet requirements may still
+					// need its admin config screens registered — otherwise a
+					// module whose only unmet requirement is a missing API
+					// key can never be given one. Modules opt in by
+					// implementing boot_admin() (optional, not part of the
+					// interface, so existing modules are unaffected).
+					if ( is_admin() && method_exists( $module, 'boot_admin' ) ) {
+						$module->boot_admin();
+					}
+
 					continue;
 				}
 

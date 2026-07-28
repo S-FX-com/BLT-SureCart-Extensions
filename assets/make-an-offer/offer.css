@@ -1,0 +1,110 @@
+/* Make an Offer — minimal, theme-neutral styles. */
+
+.blt-sce-offer {
+	display: inline-block;
+}
+
+.blt-sce-offer__modal {
+	position: fixed;
+	inset: 0;
+	z-index: 99999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.blt-sce-offer__modal[hidden] {
+	display: none;
+}
+
+.blt-sce-offer__backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba( 0, 0, 0, 0.55 );
+}
+
+.blt-sce-offer__dialog {
+	position: relative;
+	background: #fff;
+	color: #1e1e1e;
+	border-radius: 6px;
+	max-width: 420px;
+	width: calc( 100% - 32px );
+	max-height: 90vh;
+	overflow-y: auto;
+	padding: 24px;
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.3 );
+}
+
+.blt-sce-offer__close {
+	position: absolute;
+	top: 8px;
+	right: 12px;
+	background: none;
+	border: none;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	color: #757575;
+}
+
+.blt-sce-offer__field {
+	margin: 0 0 14px;
+}
+
+.blt-sce-offer__field label {
+	display: block;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.blt-sce-offer__field input,
+.blt-sce-offer__field textarea {
+	display: block;
+	width: 100%;
+	margin-top: 4px;
+	padding: 8px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	font: inherit;
+	box-sizing: border-box;
+}
+
+.blt-sce-offer__card {
+	margin-top: 4px;
+	padding: 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #fff;
+}
+
+.blt-sce-offer__hint {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	color: #757575;
+}
+
+.blt-sce-offer__error {
+	margin: 0 0 14px;
+	padding: 10px 12px;
+	border-left: 4px solid #d63638;
+	background: #fcf0f1;
+	font-size: 14px;
+}
+
+.blt-sce-offer__success {
+	margin: 0;
+	padding: 10px 12px;
+	border-left: 4px solid #00a32a;
+	background: #edfaef;
+	font-size: 14px;
+}
+
+.blt-sce-offer__actions {
+	margin: 0;
+}
+
+body.blt-sce-offer-open {
+	overflow: hidden;
+}

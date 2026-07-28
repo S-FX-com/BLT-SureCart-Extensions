@@ -8,7 +8,11 @@ Guidance for Claude Code (or any AI agent) working in this repository.
 
 Slug: `blt-surecart-extensions` · PHP prefix: `blt_sce_` · Text domain: `blt-surecart-extensions` · Namespace: `BLT\SCE`.
 
-This build ships one module: **Shippo Fulfillment** — purchases a Shippo shipping label after a SureCart order is paid, writes tracking back to SureCart, and keeps shipment status in sync. It does **not** touch checkout rate calculation or order totals — that's explicitly out of scope, permanently, not just for this build.
+This build ships three modules, each independently toggleable from the Modules screen:
+
+- **Shippo Fulfillment** — purchases a Shippo shipping label after a SureCart order is paid, writes tracking back to SureCart, and keeps shipment status in sync. It does **not** touch checkout rate calculation or order totals — that's explicitly out of scope, permanently, not just for this build.
+- **Restrict Price by Role** — hides SureCart prices from users without an allowed WordPress role and rejects restricted prices at checkout. Consolidated from the standalone `SureCart-RestrictPriceByRole` repo; it deliberately keeps that plugin's `scrpbr_restrictions` option key so existing site data carries over with zero migration.
+- **Make an Offer** — eBay-style offers with a Stripe-vaulted card, charged off-session on acceptance. Implemented from the `Blt-SureCart-Offers` repo's scaffold spec (that repo contained no code). Deliberate v1 scope: an accepted offer does **not** create a SureCart order — SureCart's PHP order-creation API is unverified (see rule about `tasks/00-discovery.md` below); the Stripe PaymentIntent is the receipt.
 
 ## Before you touch anything: read `tasks/00-discovery.md`
 
@@ -20,7 +24,9 @@ Every SureCart hook/endpoint/field name and every Shippo endpoint/field name thi
 blt-surecart-extensions.php   Bootstrap: constants, Composer autoload, Action Scheduler require, activation hooks
 src/Plugin.php                 Singleton: module registry, textdomain, Scheduler/UpdateChecker init
 src/Modules/                   ModuleRegistry + ModuleInterface — each module is independently enable/disable-able
-  ShippoFulfillment/            The one module in this build
+                               (optional boot_admin() keeps a module's settings screens reachable when its
+                               requirements are unmet, so API keys can be entered)
+  ShippoFulfillment/
     Module.php                  ALL WordPress hooks for this module live here — everything else below is hook-free
     LabelPurchaser.php           Orchestrates the purchase flow (Action Scheduler job)
     ParcelMapper.php              SKU -> parcel resolution
@@ -28,14 +34,36 @@ src/Modules/                   ModuleRegistry + ModuleInterface — each module 
     Guardrails.php                Every §5 safety check
     StatusSync.php                Shippo status <-> local status <-> SureCart shipment_status mapping
     ReviewQueue.php                Held-shipment queries + manual-purchase enqueue
+  RestrictPriceByRole/           Same pattern: Module.php owns the hooks, the rest are hook-free
+    Restrictions.php              Option access + per-user evaluation (keeps standalone plugin's option key)
+    AdminPage.php                 Role/price matrix screen (AJAX-loaded, under SC Extensions menu)
+    Frontend.php                  3-layer frontend hiding (render_block filter, inline CSS, MutationObserver JS)
+    CheckoutValidator.php         surecart/checkout/validate server-side gate
+  MakeAnOffer/                   Same pattern again
+    OfferPostType.php             sc_offer CPT + offer_* statuses (names from the sc-make-an-offer scaffold)
+    OfferRepository.php           All sc_offer post/meta access lives here, nowhere else
+    OfferManager.php              Every status transition; job handlers for capture/release/expire
+    StripeService.php             Setup/verify/capture/release flows over Api\StripeClient
+    Settings.php                  Single serialized option + BLT_SCE_STRIPE_SECRET_KEY constant override
+    ProductCatalog.php            Transient-cached SureCart product/list-price lookup for validation
+    EmailNotifier.php             All wp_mail() notifications, both directions
+    AdminPage.php + OffersListTable.php   Offers screen, detail view, actions, settings, admin-bar badge
+    Frontend.php                  [sc_make_an_offer] shortcode + Stripe.js modal form
+    CounterToken.php              HMAC tokens for counter-offer email links
 src/Api/
   ShippoClient.php               All Shippo HTTP, logged, timed out, never called outside a job
+  StripeClient.php               All Stripe HTTP, same conventions (no SDK; form-encoded; Stripe-Account aware)
   SureCartGateway.php             SureCart PHP models (Order, Fulfillment) — also synchronous, also job-only
-src/Rest/ShippoWebhookController.php   Tracking webhook receiver + security
+src/Rest/
+  ShippoWebhookController.php    Tracking webhook receiver + security
+  OfferController.php            sc-offer/v1 customer endpoints (submit/confirm/counter-response)
 src/Admin/                       Settings, Modules, Shipments list table, Review Queue, Site Health — all server-rendered, no build step
 src/Db/                          Schema (dbDelta) + ShipmentRepository (all $wpdb access lives here, nowhere else)
 src/Support/                     Logger, Scheduler (Action Scheduler wrapper), Money (decimal-safe cents), UpdateChecker
+assets/                          Per-module frontend/admin JS+CSS (vanilla, no build step)
 ```
+
+**Async-rule clarifications for Make an Offer** (rule 1 below still governs): the card-charging and PM-release Stripe calls run only inside Action Scheduler jobs, with an idempotency key so a re-run can't double-charge. Two narrow, deliberate exceptions run synchronously in the customer's REST request because the flow is impossible otherwise: SetupIntent creation (its client_secret must go back in the /submit response for Stripe.js) and a transient-cached (15 min/product) SureCart list-price lookup for server-side offer validation. Neither spends money.
 
 ## Non-negotiable rules (from the build spec — still apply to any future change)
 
