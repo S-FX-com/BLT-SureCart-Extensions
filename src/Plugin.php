@@ -87,6 +87,17 @@ final class Plugin {
 
 		Scheduler::init();
 
+		// Before boot_enabled(), not after: this registers the top-level
+		// `blt-sce-modules` menu that every module attaches its submenus to,
+		// and a submenu registered before its parent exists gets bound to the
+		// wrong action hook — see ModulesPage::hooks(). ModulesPage also runs
+		// at admin_menu priority 9 so this stays correct even if the order
+		// here changes again.
+		if ( is_admin() ) {
+			( new Admin\ModulesPage( $this->modules ) )->hooks();
+			UpdateChecker::init();
+		}
+
 		// Register modules. Each module is independently toggleable —
 		// registering here does not mean it is active; ModuleRegistry
 		// checks the stored enabled/disabled state before booting it.
@@ -95,11 +106,6 @@ final class Plugin {
 		$this->modules->register( new MakeAnOfferModule( $this->logger ) );
 		$this->modules->register( new ReportsModule( $this->logger ) );
 		$this->modules->boot_enabled();
-
-		if ( is_admin() ) {
-			( new Admin\ModulesPage( $this->modules ) )->hooks();
-			UpdateChecker::init();
-		}
 	}
 
 	/**

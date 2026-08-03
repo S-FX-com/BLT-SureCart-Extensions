@@ -4,7 +4,7 @@ Tags: surecart, shipping, shippo, fulfillment, ecommerce, reports
 Requires at least: 6.4
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Requires Plugins: surecart
@@ -82,6 +82,9 @@ The purchase job retries with exponential backoff, up to 5 attempts, then marks 
 A reconciliation sweep re-checks any shipment stuck in a non-terminal status every 15 minutes (configurable threshold, default 6 hours before a shipment is considered "stuck").
 
 == Changelog ==
+
+= 0.3.1 =
+* Fixed: every admin screen under SC Extensions except Modules itself failed to load ("Cannot load blt-sce-..."). The top-level menu was registered after the submenus that depend on it, which binds each submenu's callback to the wrong action hook. Affected Settings, Reports, Shipments, Review Queue, Offers, Offer Settings and Price Restrictions since 0.1.0.
 
 = 0.3.0 =
 * New module: Reports, with a Fulfillment Report that aggregates a date range (optionally narrowed to selected products) into one CSV row per customer and one quantity column per product variant, plus a TOTALS row for placing a manufacturing order.
