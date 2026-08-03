@@ -151,6 +151,13 @@ The presets carry this as a `remaining_only` flag (`AdminPage::fulfillment_choic
 
 **Product picker:** `GET /v1/products` with `archived` (*"Only return objects that are archived or not archived"* — and `Product::where(['archived' => false])->get()` is literally the worked example in `php-models.md`), `sort=name`, `limit`, `page`. Cached in a transient and refreshed by an Action Scheduler job so the picker never makes SureCart calls during an admin page render (rule 1).
 
+**Backtested against SureCart 4.6.2's shipped code (2026-08-03, `tests/backtest/`).** Everything above was verified from documentation; after the 0.3.0 empty-report failure the whole pipeline was additionally *executed* against SureCart's real model/request source (downloaded from WordPress.org, only `wp_remote_request` stubbed). Confirmed at runtime, not from docs:
+
+- `Order::where()`/`with()`/`paginate()` is a working chain via `__call`/`__callStatic`; `where()` merges with the model's existing query (existing keys win), `with()` fills `query['expand']`, `setPagination()` maps `per_page`→`limit`.
+- The wire format is exactly the documented one: `RequestService` serializes array params through `add_query_arg()` then rewrites `%5B<n>%5D` to `%5B%5D`, so the request really is `status[]=paid&expand[]=checkout&…&limit=100&page=N` with `Authorization: Bearer <token>`. Booleans become `1`/`0` (`archived=0`).
+- `paginate()` wraps the decoded envelope in `SureCart\Models\Collection` — which has `__get()` but **no `__isset()`** and no `ArrayAccess`, so `isset( $collection->data )` is `false` while the data is present. This is the precise class that caused 0.3.0's empty reports. `Model` itself *does* implement `__isset()`; nested `checkout->line_items` hydrates as a plain `stdClass` envelope whose `data[]` members are `LineItem` models (`setCollection()` keeps the raw wrapper). `variant_options` survives hydration as a plain string array.
+- The backtest's scenarios pin the behaviors the report depends on: 2-page pagination walk with no early exit, client-side date windowing (site-timezone inclusive bounds), per-line product filtering, outstanding-mode remaining-unit counting against server-side `fulfillment_status[]` narrowing, product-picker refresh, and the empty-store vs. filters-excluded diagnostic notes — each checked against an independently computed oracle over the same fixtures.
+
 ## Net effect on the build
 
 - Order-paid trigger: `surecart/order_updated` WP hook, checked for `status === 'paid'`, per §A.

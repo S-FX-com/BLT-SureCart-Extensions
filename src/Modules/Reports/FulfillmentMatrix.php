@@ -323,24 +323,39 @@ final class FulfillmentMatrix {
 				}
 			}
 
-			$row[]         = implode( ', ', $row_meta['order_numbers'] );
-			$row[]         = (string) $row_meta['order_count'];
-			$total_orders += (int) $row_meta['order_count'];
+			$row[] = implode( ', ', $row_meta['order_numbers'] );
+			$row[] = (string) $row_meta['order_count'];
+
+			$cells = array();
 
 			foreach ( $columns as $column ) {
 				$quantity = isset( $this->cells[ $customer_key ][ $column['key'] ] ) ? (int) $this->cells[ $customer_key ][ $column['key'] ] : 0;
 
 				// Blank rather than 0 keeps the grid readable — a
 				// spreadsheet full of zeroes hides the numbers that matter.
-				$row[] = $quantity > 0 ? (string) $quantity : '';
-
-				$column_totals[ $column['key'] ] += $quantity;
-				$row_total                       += $quantity;
+				$cells[ $column['key'] ] = $quantity;
+				$row[]                   = $quantity > 0 ? (string) $quantity : '';
+				$row_total              += $quantity;
 			}
 
-			$row[]        = (string) $row_total;
-			$grand_total += $row_total;
-			$rows[]       = $row;
+			// A customer whose every line counted zero — a zero-quantity
+			// order, or everything excluded by the product filter / the
+			// outstanding basis — would render as an all-blank row. That's
+			// noise on a manufacturing order and actively misleading on a
+			// fulfillment run, so the row is dropped entirely; nothing it
+			// carries belongs in any total.
+			if ( 0 === $row_total ) {
+				continue;
+			}
+
+			foreach ( $cells as $column_key => $quantity ) {
+				$column_totals[ $column_key ] += $quantity;
+			}
+
+			$total_orders += (int) $row_meta['order_count'];
+			$row[]         = (string) $row_total;
+			$grand_total  += $row_total;
+			$rows[]        = $row;
 		}
 
 		// The label cell carries the customer count, so the row is
