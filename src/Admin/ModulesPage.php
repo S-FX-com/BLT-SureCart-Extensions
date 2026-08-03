@@ -44,7 +44,25 @@ final class ModulesPage {
 	 * @return void
 	 */
 	public function hooks() {
-		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		// Priority 9, deliberately: this registers the `blt-sce-modules`
+		// TOP-LEVEL menu that every module hangs its submenus off, and
+		// WordPress requires the parent to exist before add_submenu_page()
+		// runs for a child.
+		//
+		// The reason is not cosmetic. add_submenu_page() resolves the action
+		// hook its callback is bound to via get_plugin_page_hookname(), which
+		// reads the $admin_page_hooks global that add_menu_page() populates.
+		// Register a submenu first and the parent is still unknown, so the
+		// hook name falls back to "admin_page_<slug>"; by the time admin.php
+		// serves the request the parent exists, so it looks for
+		// "<parent-title>_page_<slug>" instead, finds no action registered,
+		// and dies with "Cannot load <slug>." The submenu still appears in the
+		// sidebar, which makes this look like a routing or permissions fault
+		// rather than an ordering one.
+		//
+		// A priority lower than the modules' default 10 makes this correct
+		// regardless of the order modules happen to be booted in.
+		add_action( 'admin_menu', array( $this, 'register_menu' ), 9 );
 		add_action( 'admin_post_blt_sce_toggle_module', array( $this, 'handle_toggle' ) );
 	}
 
