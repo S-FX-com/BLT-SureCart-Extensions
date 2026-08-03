@@ -47,6 +47,9 @@ $options = array(
 	'sc_make_an_offer_settings',
 	'blt_sce_offer_sc_mpm_id',
 	'blt_sce_offer_sc_adhoc_prices',
+	// Reports module (cached product picker list).
+	'blt_sce_reports_products',
+	'blt_sce_reports_products_refreshed',
 );
 
 foreach ( $options as $option ) {
@@ -68,4 +71,32 @@ $offer_ids = get_posts(
 
 foreach ( $offer_ids as $offer_id ) {
 	wp_delete_post( $offer_id, true );
+}
+
+// Reports: remove generated CSVs. These hold customer names, emails and
+// possibly postal addresses, so leaving them in uploads after an opted-in
+// data wipe would defeat the point of the opt-in.
+$blt_sce_uploads = wp_upload_dir();
+
+if ( empty( $blt_sce_uploads['error'] ) ) {
+	$blt_sce_report_dir = trailingslashit( $blt_sce_uploads['basedir'] ) . 'blt-sce-reports';
+
+	if ( is_dir( $blt_sce_report_dir ) ) {
+		foreach ( (array) glob( trailingslashit( $blt_sce_report_dir ) . '*' ) as $blt_sce_report_file ) {
+			if ( is_file( $blt_sce_report_file ) ) {
+				wp_delete_file( $blt_sce_report_file );
+			}
+		}
+
+		// Also clears the .htaccess/index.html guards written alongside them.
+		foreach ( array( '.htaccess', 'index.html' ) as $blt_sce_guard ) {
+			$blt_sce_guard_path = trailingslashit( $blt_sce_report_dir ) . $blt_sce_guard;
+
+			if ( is_file( $blt_sce_guard_path ) ) {
+				wp_delete_file( $blt_sce_guard_path );
+			}
+		}
+
+		@rmdir( $blt_sce_report_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- best effort; a non-empty dir is left alone.
+	}
 }
