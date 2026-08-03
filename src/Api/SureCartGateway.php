@@ -13,6 +13,7 @@
 
 namespace BLT\SCE\Api;
 
+use BLT\SCE\Support\Obj;
 use SureCart\Models\Fulfillment;
 use SureCart\Models\Order;
 use SureCart\Models\Product;
@@ -120,7 +121,10 @@ final class SureCartGateway {
 						'page'     => max( 1, (int) $page ),
 					)
 				);
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
+			// Throwable, not Exception: a query-builder method that doesn't
+			// exist throws \Error, which an Exception-only catch would let
+			// escape and kill the job mid-report.
 			return new \WP_Error( 'blt_sce_order_list_failed', $e->getMessage() );
 		}
 
@@ -154,7 +158,7 @@ final class SureCartGateway {
 					'page'     => max( 1, (int) $page ),
 				)
 			);
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			return new \WP_Error( 'blt_sce_product_list_failed', $e->getMessage() );
 		}
 
@@ -178,35 +182,143 @@ final class SureCartGateway {
 	 * @return array
 	 */
 	private static function normalize_page( $result, $requested_page, $requested_limit ) {
-		$data       = array();
-		$pagination = null;
+		$data       = self::read( $result, 'data' );
+		$pagination = self::read( $result, 'pagination' );
 
-		if ( is_array( $result ) ) {
-			$data       = isset( $result['data'] ) ? $result['data'] : array();
-			$pagination = isset( $result['pagination'] ) ? $result['pagination'] : null;
-		} elseif ( is_object( $result ) ) {
-			$data       = isset( $result->data ) ? $result->data : array();
-			$pagination = isset( $result->pagination ) ? $result->pagination : null;
+		// No `data` member means this isn't the documented envelope. Rather
+		// than treat that as "no records" — which silently produces an empty
+		// report and looks like a store with no orders — fall back through the
+		// other shapes a model query can hand back.
+		if ( null === $data ) {
+			if ( is_array( $result ) && self::is_list( $result ) ) {
+				// paginate() returned the records themselves, unwrapped.
+				$data = $result;
+			} elseif ( $result instanceof \Traversable ) {
+				$data = iterator_to_array( $result );
+			} elseif ( is_object( $result ) && method_exists( $result, 'toArray' ) ) {
+				$as_array = $result->toArray();
+
+				if ( is_array( $as_array ) ) {
+					$data = self::read( $as_array, 'data' );
+
+					if ( null === $data && self::is_list( $as_array ) ) {
+						$data = $as_array;
+					}
+
+					if ( null === $pagination ) {
+						$pagination = self::read( $as_array, 'pagination' );
+					}
+				}
+			}
+		}
+
+		if ( $data instanceof \Traversable ) {
+			$data = iterator_to_array( $data );
 		}
 
 		$pick = static function ( $bag, $key, $default ) {
-			if ( is_array( $bag ) && isset( $bag[ $key ] ) ) {
-				return (int) $bag[ $key ];
-			}
+			$value = self::read( $bag, $key );
 
-			if ( is_object( $bag ) && isset( $bag->$key ) ) {
-				return (int) $bag->$key;
-			}
-
-			return $default;
+			return null === $value ? $default : (int) $value;
 		};
 
 		return array(
-			'data'  => is_array( $data ) ? $data : array(),
+			'data'  => is_array( $data ) ? array_values( $data ) : array(),
 			'count' => $pick( $pagination, 'count', 0 ),
 			'page'  => $pick( $pagination, 'page', (int) $requested_page ),
 			'limit' => $pick( $pagination, 'limit', (int) $requested_limit ),
+			'shape' => self::describe_shape( $result ),
 		);
+	}
+
+	/**
+	 * Read a member from an array or object without trusting isset().
+	 *
+	 * SureCart's models expose attributes through a magic __get(), and
+	 * isset()/property_exists() both report false for those unless the class
+	 * also implements __isset(). An isset() guard on such an object therefore
+	 * reads as "the field isn't there" when the field is present — which is
+	 * how an entire response can silently come back empty.
+	 *
+	 * @param mixed  $bag Array, object, or anything else.
+	 * @param string $key Member name.
+	 * @return mixed Null when genuinely absent.
+	 */
+	private static function read( $bag, $key ) {
+		return Obj::get( $bag, $key );
+	}
+
+	/**
+	 * Whether an array is a sequential list rather than a keyed envelope.
+	 * (array_is_list() is PHP 8.1+; this plugin supports 7.4.)
+	 *
+	 * @param array $value Array to test.
+	 * @return bool
+	 */
+	private static function is_list( array $value ) {
+		if ( array() === $value ) {
+			return true;
+		}
+
+		return array_keys( $value ) === range( 0, count( $value ) - 1 );
+	}
+
+	/**
+	 * Short description of a response's runtime shape, for diagnostics. This
+	 * exists because the only way to know what a model query really returns
+	 * on a live store is to look — and a report that comes back empty needs to
+	 * say whether SureCart returned nothing or we failed to read what it did.
+	 *
+	 * @param mixed $result Raw response.
+	 * @return string
+	 */
+	public static function describe_shape( $result ) {
+		if ( is_array( $result ) ) {
+			return sprintf(
+				'array(%d) keys[%s]',
+				count( $result ),
+				implode( ',', array_slice( array_map( 'strval', array_keys( $result ) ), 0, 6 ) )
+			);
+		}
+
+		if ( is_object( $result ) ) {
+			return sprintf(
+				'%s props[%s]%s%s',
+				get_class( $result ),
+				implode( ',', array_slice( array_keys( get_object_vars( $result ) ), 0, 6 ) ),
+				method_exists( $result, '__get' ) ? ' +__get' : '',
+				$result instanceof \Traversable ? ' +Traversable' : ''
+			);
+		}
+
+		return gettype( $result );
+	}
+
+	/**
+	 * Diagnostic-only: ask for a single order with no filters at all, to
+	 * establish whether the store returns orders through the models and how
+	 * many it reports. Never used to build a report — only to explain one that
+	 * came back empty, so a user's filters are never silently ignored.
+	 *
+	 * @return array|\WP_Error Same envelope as list_orders_page().
+	 */
+	public function probe_orders() {
+		try {
+			$result = Order::paginate(
+				array(
+					'per_page' => 1,
+					'page'     => 1,
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return new \WP_Error( 'blt_sce_order_probe_failed', $e->getMessage() );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return self::normalize_page( $result, 1, 1 );
 	}
 
 	/**
@@ -223,57 +335,56 @@ final class SureCartGateway {
 	 * }
 	 */
 	public function extract_shipping_context( $order ) {
-		$checkout = is_object( $order ) && isset( $order->checkout ) ? $order->checkout : null;
+		$checkout = Obj::obj( $order, 'checkout' );
 
 		if ( ! is_object( $checkout ) ) {
 			return new \WP_Error( 'blt_sce_no_checkout', __( 'Order has no expanded checkout.', 'blt-surecart-extensions' ) );
 		}
 
-		$address = isset( $checkout->shipping_address ) && is_object( $checkout->shipping_address ) ? $checkout->shipping_address : null;
+		$address = Obj::obj( $checkout, 'shipping_address' );
 
 		if ( ! $address ) {
 			return new \WP_Error( 'blt_sce_no_shipping_address', __( 'Order has no shipping address — likely a digital-only order.', 'blt-surecart-extensions' ) );
 		}
 
 		$shipping_address = array(
-			'name'    => isset( $address->name ) ? $address->name : '',
-			'street1' => isset( $address->line_1 ) ? $address->line_1 : '',
-			'street2' => isset( $address->line_2 ) ? $address->line_2 : '',
-			'city'    => isset( $address->city ) ? $address->city : '',
-			'state'   => isset( $address->state ) ? $address->state : '',
-			'zip'     => isset( $address->postal_code ) ? $address->postal_code : '',
-			'country' => isset( $address->country ) ? $address->country : '',
+			'name'    => Obj::str( $address, 'name' ),
+			'street1' => Obj::str( $address, 'line_1' ),
+			'street2' => Obj::str( $address, 'line_2' ),
+			'city'    => Obj::str( $address, 'city' ),
+			'state'   => Obj::str( $address, 'state' ),
+			'zip'     => Obj::str( $address, 'postal_code' ),
+			'country' => Obj::str( $address, 'country' ),
 		);
 
-		$line_items_raw = isset( $checkout->line_items ) ? $checkout->line_items : null;
-		$line_items_raw = is_object( $line_items_raw ) && isset( $line_items_raw->data ) ? $line_items_raw->data : $line_items_raw;
+		$line_items_raw = Obj::items( $checkout, 'line_items' );
 
-		if ( empty( $line_items_raw ) || ! is_array( $line_items_raw ) ) {
+		if ( empty( $line_items_raw ) ) {
 			return new \WP_Error( 'blt_sce_no_line_items', __( 'Order has no line items.', 'blt-surecart-extensions' ) );
 		}
 
 		$line_items = array();
 
 		foreach ( $line_items_raw as $line_item ) {
-			$sku = null;
+			$sku = Obj::str( Obj::obj( $line_item, 'variant' ), 'sku' );
 
-			if ( isset( $line_item->variant ) && is_object( $line_item->variant ) && ! empty( $line_item->variant->sku ) ) {
-				$sku = $line_item->variant->sku;
-			} elseif ( isset( $line_item->price->product ) && is_object( $line_item->price->product ) && ! empty( $line_item->price->product->sku ) ) {
-				$sku = $line_item->price->product->sku;
+			if ( '' === $sku ) {
+				$sku = Obj::str( Obj::obj( Obj::obj( $line_item, 'price' ), 'product' ), 'sku' );
 			}
 
+			$quantity = Obj::int( $line_item, 'quantity', 1 );
+
 			$line_items[] = array(
-				'line_item_id' => $line_item->id,
-				'sku'          => $sku,
-				'quantity'     => isset( $line_item->quantity ) ? (int) $line_item->quantity : 1,
+				'line_item_id' => Obj::str( $line_item, 'id' ),
+				'sku'          => '' !== $sku ? $sku : null,
+				'quantity'     => $quantity > 0 ? $quantity : 1,
 			);
 		}
 
 		return array(
-			'checkout_id'       => $checkout->id,
+			'checkout_id'       => Obj::str( $checkout, 'id' ),
 			'shipping_address'  => $shipping_address,
-			'order_total_cents' => isset( $checkout->total_amount ) ? (int) $checkout->total_amount : 0,
+			'order_total_cents' => Obj::int( $checkout, 'total_amount' ),
 			'line_items'        => $line_items,
 		);
 	}

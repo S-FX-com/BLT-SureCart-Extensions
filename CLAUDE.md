@@ -71,7 +71,8 @@ src/Rest/
 src/Admin/                       Settings, Modules, Shipments list table, Review Queue, Site Health — all server-rendered, no build step
 src/Db/                          Schema (dbDelta) + ShipmentRepository / ReportRepository
                                  (all $wpdb access lives here, nowhere else)
-src/Support/                     Logger, Scheduler (Action Scheduler wrapper), Money (decimal-safe cents), UpdateChecker
+src/Support/                     Logger, Scheduler (Action Scheduler wrapper), Money (decimal-safe cents),
+                                 Obj (safe reads of magic-accessor API objects — see rule 10), UpdateChecker
 assets/                          Per-module frontend/admin JS+CSS (vanilla, no build step)
 ```
 
@@ -91,6 +92,8 @@ assets/                          Per-module frontend/admin JS+CSS (vanilla, no b
 8. **Any table added after 1.0.0 needs `Db\Schema::DB_VERSION` bumped.** This plugin updates in place from GitHub Releases, and WordPress does **not** re-run activation hooks on update — `Schema::maybe_upgrade()` on `plugins_loaded` is the only thing that creates a new table on an existing site. Adding a `CREATE TABLE` without bumping the version ships a module that's broken everywhere except fresh installs.
 
 9. **The `blt-sce-modules` top-level menu must be registered before any submenu that hangs off it.** `Admin\ModulesPage` therefore hooks `admin_menu` at **priority 9** while every module's submenu uses the default 10, and `Plugin::init()` calls `ModulesPage::hooks()` before `boot_enabled()`. Don't "tidy" either of those. WordPress resolves a plugin page's action hook through `get_plugin_page_hookname()`, which reads the `$admin_page_hooks` global that `add_menu_page()` fills in — register a submenu while the parent is still unknown and its callback binds to `admin_page_<slug>`, but `admin.php` later looks for `<parent-title>_page_<slug>` and dies with "Cannot load `<slug>`." The submenu still shows up in the sidebar, so it reads like a routing or capability fault instead of an ordering one. This shipped broken from 0.1.0 through 0.3.0 and made every screen except Modules unreachable.
+
+10. **Never use `isset()`, `empty()`, or `property_exists()` on a SureCart model object — use `Support\Obj`.** SureCart's models resolve attributes through a magic `__get()` without a matching `__isset()`, so PHP reports *every* attribute as absent: `isset( $order->checkout )` is `false` and `empty( $order->checkout )` is `true` while `$order->checkout` returns a perfectly good object. Guarding model access that way turns a fully populated API response into a silently empty one — no exception, no warning, nothing in the log. That is exactly how 0.3.0 shipped a "successful" fulfillment report containing zero orders against a store with 96 shirts sold, and why the product picker stayed empty. `Obj::get()/str()/int()/obj()/items()` handle arrays, `stdClass`, `ArrayAccess` collections and magic-accessor models uniformly; `Obj::items()` also unwraps the `{ data: [] }` collection envelope. The same applies to parsing a list response — `Api\SureCartGateway::normalize_page()` accepts every envelope shape a model query can return and reports the runtime shape it saw, because assuming one shape is what caused this.
 
 ## Admin page URLs
 

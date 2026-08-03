@@ -4,7 +4,7 @@ Tags: surecart, shipping, shippo, fulfillment, ecommerce, reports
 Requires at least: 6.4
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Requires Plugins: surecart
@@ -82,6 +82,11 @@ The purchase job retries with exponential backoff, up to 5 attempts, then marks 
 A reconciliation sweep re-checks any shipment stuck in a non-terminal status every 15 minutes (configurable threshold, default 6 hours before a shipment is considered "stuck").
 
 == Changelog ==
+
+= 0.3.2 =
+* Fixed: fulfillment reports completed with zero customers and zero items on a store that has orders, and the product picker stayed empty. SureCart's models expose their attributes through a magic __get(), which makes isset() and empty() report every attribute as missing — so a fully populated response read as empty, with no error. All reads of SureCart data now go through a safe accessor.
+* Reports that come back empty now say why, distinguishing "the filters excluded everything" from "the response could not be read", instead of silently producing an empty CSV.
+* A product refresh that returns nothing no longer overwrites a working product list.
 
 = 0.3.1 =
 * Fixed: every admin screen under SC Extensions except Modules itself failed to load ("Cannot load blt-sce-..."). The top-level menu was registered after the submenus that depend on it, which binds each submenu's callback to the wrong action hook. Affected Settings, Reports, Shipments, Review Queue, Offers, Offer Settings and Price Restrictions since 0.1.0.
