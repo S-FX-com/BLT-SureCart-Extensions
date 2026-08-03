@@ -372,12 +372,14 @@ final class SureCartGateway {
 				$sku = Obj::str( Obj::obj( Obj::obj( $line_item, 'price' ), 'product' ), 'sku' );
 			}
 
-			$quantity = Obj::int( $line_item, 'quantity', 1 );
-
 			$line_items[] = array(
 				'line_item_id' => Obj::str( $line_item, 'id' ),
 				'sku'          => '' !== $sku ? $sku : null,
-				'quantity'     => $quantity > 0 ? $quantity : 1,
+				// Default to 1 only when the field is missing or non-numeric.
+				// A real zero must stay zero: this quantity flows into the
+				// SureCart fulfillment payload, and inflating an unpurchased
+				// unit to 1 would try to fulfill something that wasn't bought.
+				'quantity'     => Obj::int( $line_item, 'quantity', 1 ),
 			);
 		}
 

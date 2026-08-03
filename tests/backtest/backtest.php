@@ -467,6 +467,27 @@ check( 'line items hydrated as LineItem models', get_class( $collection->data[0]
 check( 'variant hydrated as Variant model', get_class( $collection->data[0]->checkout->line_items->data[0]->variant ), 'SureCart\Models\Variant' );
 check( 'variant_options survives hydration as a plain array', $collection->data[0]->checkout->line_items->data[0]->variant_options, array( $size_names[ 1 % 5 ] ) );
 
+/* =================================================================== H === */
+echo "\n=== H. Shippo path: extract_shipping_context on a real hydrated Order ===\n";
+
+// A zero-quantity line must survive as zero — this quantity feeds SureCart's
+// fulfillment payload via LabelPurchaser, and inflating it to 1 would try to
+// fulfill a unit that was never bought. Default to 1 only when absent.
+$h_fixture = fx_order( 900, 'Zero Case', 'zerocase@example.com', et_ts( '2026-07-10 10:00' ), array(
+	fx_line( $SHIRT, $product_pool[ $SHIRT ], 'L', 0 ),
+	fx_line( $SHIRT, $product_pool[ $SHIRT ], 'M', 2 ),
+) );
+unset( $h_fixture['checkout']['line_items']['data'][1]['quantity'] ); // absent entirely -> default 1
+
+$h_order   = new \SureCart\Models\Order( json_decode( json_encode( $h_fixture ) ) );
+$h_context = ( new SureCartGateway() )->extract_shipping_context( $h_order );
+
+check_true( 'H: context extracted from real model', is_array( $h_context ), is_wp_error( $h_context ) ? $h_context->get_error_message() : '' );
+check( 'H: real zero quantity preserved', $h_context['line_items'][0]['quantity'], 0 );
+check( 'H: absent quantity defaults to 1', $h_context['line_items'][1]['quantity'], 1 );
+check( 'H: shipping address mapped to Shippo field names', $h_context['shipping_address']['zip'], '11771' );
+check( 'H: order total read in cents', $h_context['order_total_cents'], 5000 );
+
 /* ==================================================================== ∎ === */
 echo "\n" . ( 0 === $FAIL ? 'BACKTEST PASSED — every scenario, wire assertion and oracle comparison.' : "BACKTEST FAILED — {$FAIL} check(s)." ) . "\n";
 exit( 0 === $FAIL ? 0 : 1 );
