@@ -117,25 +117,34 @@ final class AdminPage {
 	/**
 	 * Fulfillment-status presets, keyed by the value stored in params.
 	 *
-	 * @return array<string,array{label: string, statuses: string[]}>
+	 * `remaining_only` decides which quantity the report counts. A preset
+	 * about work still to do counts the unfulfilled remainder, so a
+	 * partially shipped order doesn't ask for the shipped units a second
+	 * time; a preset about what was bought counts the ordered quantity.
+	 *
+	 * @return array<string,array{label: string, statuses: string[], remaining_only: bool}>
 	 */
 	private function fulfillment_choices() {
 		return array(
-			'any'           => array(
-				'label'    => __( 'Any — everything ordered in the period', 'blt-surecart-extensions' ),
-				'statuses' => array(),
+			'any'         => array(
+				'label'          => __( 'Any — everything ordered in the period', 'blt-surecart-extensions' ),
+				'statuses'       => array(),
+				'remaining_only' => false,
 			),
-			'outstanding'   => array(
-				'label'    => __( 'Outstanding — unfulfilled and partially fulfilled', 'blt-surecart-extensions' ),
-				'statuses' => array( 'unfulfilled', 'partially_fulfilled' ),
+			'outstanding' => array(
+				'label'          => __( 'Outstanding — unfulfilled and partially fulfilled (counts units still to ship)', 'blt-surecart-extensions' ),
+				'statuses'       => array( 'unfulfilled', 'partially_fulfilled' ),
+				'remaining_only' => true,
 			),
-			'unfulfilled'   => array(
-				'label'    => __( 'Unfulfilled only', 'blt-surecart-extensions' ),
-				'statuses' => array( 'unfulfilled' ),
+			'unfulfilled' => array(
+				'label'          => __( 'Unfulfilled only (counts units still to ship)', 'blt-surecart-extensions' ),
+				'statuses'       => array( 'unfulfilled' ),
+				'remaining_only' => true,
 			),
-			'fulfilled'     => array(
-				'label'    => __( 'Already fulfilled only', 'blt-surecart-extensions' ),
-				'statuses' => array( 'fulfilled' ),
+			'fulfilled'   => array(
+				'label'          => __( 'Already fulfilled only', 'blt-surecart-extensions' ),
+				'statuses'       => array( 'fulfilled' ),
+				'remaining_only' => false,
 			),
 		);
 	}
@@ -205,6 +214,7 @@ final class AdminPage {
 			'product_ids'          => array_values( array_unique( $product_ids ) ),
 			'fulfillment'          => $fulfillment_key,
 			'fulfillment_statuses' => $fulfillment_choices[ $fulfillment_key ]['statuses'],
+			'remaining_only'       => $fulfillment_choices[ $fulfillment_key ]['remaining_only'],
 			'include_address'      => ! empty( $_POST['include_address'] ),
 		);
 
@@ -507,13 +517,13 @@ final class AdminPage {
 		}
 
 		echo '</select>';
-		echo '<p class="description">' . esc_html__( 'Use "Outstanding" when the report is driving a bulk-fulfillment run, so already-shipped orders drop out.', 'blt-surecart-extensions' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Use "Outstanding" when the report is driving a bulk-fulfillment run: already-shipped orders drop out, and a partially shipped order counts only the units still owed rather than the whole original quantity.', 'blt-surecart-extensions' ) . '</p>';
 		echo '</td></tr>';
 
 		// Address columns.
 		echo '<tr><th scope="row">' . esc_html__( 'Shipping addresses', 'blt-surecart-extensions' ) . '</th><td>';
 		echo '<label><input type="checkbox" name="include_address" value="1" /> ' . esc_html__( 'Add shipping address columns', 'blt-surecart-extensions' ) . '</label>';
-		echo '<p class="description">' . esc_html__( 'Off by default. Turn it on when the CSV is being handed to a fulfillment house rather than a manufacturer.', 'blt-surecart-extensions' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Off by default. Turn it on when the CSV is being handed to a fulfillment house rather than a manufacturer. Rows are then grouped per destination, so a customer who shipped to two addresses gets one row per address instead of a single merged row.', 'blt-surecart-extensions' ) . '</p>';
 		echo '</td></tr>';
 
 		echo '</tbody></table>';
@@ -586,9 +596,14 @@ final class AdminPage {
 			echo '<td>';
 
 			if ( ReportRepository::STATUS_COMPLETE === $row['status'] ) {
+				// In address mode a row is a customer-and-destination pair, so
+				// calling every row a customer would overstate the count.
 				printf(
-					/* translators: 1: customer count, 2: variant column count, 3: total item count */
-					esc_html__( '%1$d customers · %2$d variant columns · %3$d items', 'blt-surecart-extensions' ),
+					empty( $params['include_address'] )
+						/* translators: 1: customer count, 2: variant column count, 3: total item count */
+						? esc_html__( '%1$d customers · %2$d variant columns · %3$d items', 'blt-surecart-extensions' )
+						/* translators: 1: destination row count, 2: variant column count, 3: total item count */
+						: esc_html__( '%1$d destinations · %2$d variant columns · %3$d items', 'blt-surecart-extensions' ),
 					(int) $row['row_count'],
 					(int) $row['column_count'],
 					(int) $row['item_count']
@@ -730,8 +745,14 @@ final class AdminPage {
 			$parts[] = $fulfillment_choices[ $fulfillment_key ]['label'];
 		}
 
+		// Which quantity was counted is the difference between "order 15
+		// shirts" and "ship 15 shirts" — worth stating on a stored report.
+		$parts[] = ! empty( $params['remaining_only'] )
+			? __( 'counting units still to ship', 'blt-surecart-extensions' )
+			: __( 'counting units ordered', 'blt-surecart-extensions' );
+
 		if ( ! empty( $params['include_address'] ) ) {
-			$parts[] = __( 'with addresses', 'blt-surecart-extensions' );
+			$parts[] = __( 'with addresses, grouped per destination', 'blt-surecart-extensions' );
 		}
 
 		return implode( ' · ', $parts );

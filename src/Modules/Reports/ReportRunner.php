@@ -133,6 +133,22 @@ final class ReportRunner {
 			return;
 		}
 
+		// A report can be deleted while its job is still running — a real
+		// window, since a large date range takes minutes. mark_complete()
+		// would then update nothing and leave the CSV on disk unreferenced,
+		// invisible to the Reports screen and so undeletable through it. Since
+		// that file holds customer PII, discard it instead.
+		if ( ! $this->repository->find( $report_id ) ) {
+			$this->storage->delete( $result['filename'] );
+
+			$this->logger->info(
+				'Report was deleted while it was building — generated file discarded.',
+				array( 'report_id' => $report_id )
+			);
+
+			return;
+		}
+
 		$this->repository->mark_complete( $report_id, $result['filename'], $result['counts'] );
 
 		$this->logger->info(
@@ -219,7 +235,15 @@ final class ReportRunner {
 			$filters['fulfillment_status'] = $params['fulfillment_statuses'];
 		}
 
-		$matrix = new FulfillmentMatrix( ! empty( $params['include_address'] ) );
+		$matrix = new FulfillmentMatrix(
+			array(
+				'include_address' => ! empty( $params['include_address'] ),
+				'remaining_only'  => ! empty( $params['remaining_only'] ),
+				// The same selection that narrows the order query has to narrow
+				// the line items too — see FulfillmentMatrix::product_selected().
+				'product_ids'     => ! empty( $params['product_ids'] ) && is_array( $params['product_ids'] ) ? $params['product_ids'] : array(),
+			)
+		);
 
 		$scanned   = 0;
 		$matched   = 0;
@@ -274,6 +298,16 @@ final class ReportRunner {
 		}
 
 		$table = $matrix->to_table();
+
+		if ( $matrix->unidentified_skipped() > 0 ) {
+			$this->logger->warning(
+				'Report excluded line items whose product could not be identified while a product filter was active.',
+				array(
+					'report_id' => $report_id,
+					'excluded'  => $matrix->unidentified_skipped(),
+				)
+			);
+		}
 
 		$filename = $this->storage->new_filename( $report_id, ReportRepository::TYPE_FULFILLMENT );
 		$path     = $this->storage->path( $filename );

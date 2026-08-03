@@ -101,6 +101,22 @@ final class FulfillmentMatrix {
 	private $include_address;
 
 	/**
+	 * Selected product IDs as a lookup map (id => true), empty when the
+	 * report covers all products.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $product_ids = array();
+
+	/**
+	 * Whether quantities count the unfulfilled remainder rather than the
+	 * quantity originally ordered.
+	 *
+	 * @var bool
+	 */
+	private $remaining_only;
+
+	/**
 	 * Orders that contributed at least one line item.
 	 *
 	 * @var int
@@ -108,12 +124,39 @@ final class FulfillmentMatrix {
 	private $orders_counted = 0;
 
 	/**
+	 * Line items dropped because a product filter was active and the line
+	 * item's product could not be identified at all. Surfaced by the runner
+	 * rather than swallowed — a filtered report that silently omits rows is
+	 * worse than one that says it did.
+	 *
+	 * @var int
+	 */
+	private $unidentified_skipped = 0;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param bool $include_address Whether to collect shipping-address columns.
+	 * @param array $options {
+	 *     @type bool     $include_address Collect shipping-address columns, and
+	 *                                     group rows per destination.
+	 *     @type string[] $product_ids     Only count line items belonging to these
+	 *                                     SureCart product IDs. Empty for all.
+	 *     @type bool     $remaining_only  Count the unfulfilled remainder
+	 *                                     (quantity - fulfilled_quantity) instead
+	 *                                     of the quantity ordered.
+	 * }
 	 */
-	public function __construct( $include_address = false ) {
-		$this->include_address = (bool) $include_address;
+	public function __construct( array $options = array() ) {
+		$this->include_address = ! empty( $options['include_address'] );
+		$this->remaining_only  = ! empty( $options['remaining_only'] );
+
+		if ( ! empty( $options['product_ids'] ) && is_array( $options['product_ids'] ) ) {
+			foreach ( $options['product_ids'] as $product_id ) {
+				if ( is_scalar( $product_id ) && '' !== (string) $product_id ) {
+					$this->product_ids[ (string) $product_id ] = true;
+				}
+			}
+		}
 	}
 
 	/**
@@ -135,8 +178,14 @@ final class FulfillmentMatrix {
 			return false;
 		}
 
-		$identity     = $this->customer_identity( $checkout );
-		$customer_key = $this->customer_key( $identity, $order );
+		$identity = $this->customer_identity( $checkout );
+
+		// The destination has to be resolved before the grouping key, because
+		// in address mode it is part of that key: one customer who shipped to
+		// two addresses is two fulfillment rows, not one row that silently
+		// drops a destination.
+		$address      = $this->include_address ? $this->address( $checkout ) : array();
+		$customer_key = $this->customer_key( $identity, $order, $address );
 
 		if ( ! isset( $this->rows[ $customer_key ] ) ) {
 			$this->rows[ $customer_key ] = array(
@@ -144,7 +193,7 @@ final class FulfillmentMatrix {
 				'email'         => $identity['email'],
 				'order_numbers' => array(),
 				'order_count'   => 0,
-				'address'       => $this->include_address ? $this->address( $checkout ) : array(),
+				'address'       => $address,
 			);
 		}
 
@@ -154,10 +203,6 @@ final class FulfillmentMatrix {
 		// another; keep the first non-empty one we see.
 		if ( '' === $row['name'] && '' !== $identity['name'] ) {
 			$row['name'] = $identity['name'];
-		}
-
-		if ( $this->include_address && empty( $row['address'] ) ) {
-			$row['address'] = $this->address( $checkout );
 		}
 
 		$order_number = '';
@@ -178,15 +223,23 @@ final class FulfillmentMatrix {
 		$contributed = false;
 
 		foreach ( $line_items as $line_item ) {
-			$quantity = isset( $line_item->quantity ) ? (int) $line_item->quantity : 0;
-
-			if ( $quantity <= 0 ) {
-				continue;
-			}
-
 			$column = $this->column_for( $line_item );
 
 			if ( null === $column ) {
+				continue;
+			}
+
+			// `product_ids[]` on GET /v1/orders filters which ORDERS come
+			// back, not which line items inside them — an order containing a
+			// selected product returns all its other line items too. Without
+			// this the CSV would total products the operator excluded.
+			if ( ! $this->product_selected( $column['product_id'] ) ) {
+				continue;
+			}
+
+			$quantity = $this->countable_quantity( $line_item );
+
+			if ( $quantity <= 0 ) {
 				continue;
 			}
 
@@ -241,7 +294,12 @@ final class FulfillmentMatrix {
 			$header[] = $column['label'];
 		}
 
-		$header[] = __( 'Total Items', 'blt-surecart-extensions' );
+		// The CSV gets emailed to a manufacturer or a fulfillment house with
+		// none of this screen's context attached, so the quantity basis has to
+		// be legible from the file itself.
+		$header[] = $this->remaining_only
+			? __( 'Total Items Outstanding', 'blt-surecart-extensions' )
+			: __( 'Total Items', 'blt-surecart-extensions' );
 
 		$rows            = array();
 		$column_totals   = array_fill_keys( array_keys( $this->columns ), 0 );
@@ -287,11 +345,17 @@ final class FulfillmentMatrix {
 		// this screen. Every numeric cell below stays a true column total:
 		// "Order Count" totals orders, not customers.
 		$totals = array(
-			sprintf(
-				/* translators: %d: number of customers in the report */
-				_n( 'TOTALS (%d customer)', 'TOTALS (%d customers)', count( $rows ), 'blt-surecart-extensions' ),
-				count( $rows )
-			),
+			$this->include_address
+				? sprintf(
+					/* translators: %d: number of customer-and-destination rows in the report */
+					_n( 'TOTALS (%d destination)', 'TOTALS (%d destinations)', count( $rows ), 'blt-surecart-extensions' ),
+					count( $rows )
+				)
+				: sprintf(
+					/* translators: %d: number of customers in the report */
+					_n( 'TOTALS (%d customer)', 'TOTALS (%d customers)', count( $rows ), 'blt-surecart-extensions' ),
+					count( $rows )
+				),
 			'',
 		);
 
@@ -327,6 +391,74 @@ final class FulfillmentMatrix {
 	 */
 	public function orders_counted() {
 		return $this->orders_counted;
+	}
+
+	/**
+	 * Line items dropped because a product filter was active and the item's
+	 * product could not be identified.
+	 *
+	 * @return int
+	 */
+	public function unidentified_skipped() {
+		return $this->unidentified_skipped;
+	}
+
+	/**
+	 * Whether a line item's product is in the report's selection.
+	 *
+	 * With a filter active, a line item whose product can't be identified is
+	 * excluded rather than assumed to match: the operator asked for specific
+	 * products, and putting an unverifiable one on a manufacturing order is
+	 * the more expensive mistake. Those exclusions are counted so the runner
+	 * can log them.
+	 *
+	 * @param string $product_id Resolved product ID, possibly empty.
+	 * @return bool
+	 */
+	private function product_selected( $product_id ) {
+		if ( empty( $this->product_ids ) ) {
+			return true;
+		}
+
+		if ( '' === $product_id ) {
+			++$this->unidentified_skipped;
+
+			return false;
+		}
+
+		return isset( $this->product_ids[ $product_id ] );
+	}
+
+	/**
+	 * The quantity this line item contributes.
+	 *
+	 * Two different questions need two different numbers, which is why this
+	 * follows the report's fulfillment filter:
+	 *
+	 *   - A manufacturing order asks "how many were bought" → `quantity`.
+	 *   - An outstanding-work report asks "how many still need shipping" →
+	 *     `quantity - fulfilled_quantity`. Counting the full quantity on a
+	 *     partially fulfilled order would re-ship units that already went out.
+	 *
+	 * Both fields are confirmed on SureCart's line item: `quantity` ("The
+	 * quantity of products being purchased") and `fulfilled_quantity` ("The
+	 * quantity of products that have been fulfilled").
+	 *
+	 * @param object $line_item Expanded line item.
+	 * @return int
+	 */
+	private function countable_quantity( $line_item ) {
+		$quantity = isset( $line_item->quantity ) ? (int) $line_item->quantity : 0;
+
+		if ( ! $this->remaining_only ) {
+			return $quantity;
+		}
+
+		$fulfilled = isset( $line_item->fulfilled_quantity ) && is_numeric( $line_item->fulfilled_quantity )
+			? (int) $line_item->fulfilled_quantity
+			: 0;
+
+		return max( 0, $quantity - $fulfilled );
 	}
 
 	/**
@@ -408,20 +540,56 @@ final class FulfillmentMatrix {
 	 * order ID so they still appear rather than being silently merged into
 	 * one anonymous row.
 	 *
+	 * In address mode the destination joins the key. Consolidating a customer
+	 * who shipped to two addresses into one row would point every aggregated
+	 * item at whichever address happened to be seen first and lose the other
+	 * one entirely — fine for a manufacturer count, wrong for a shipping run.
+	 *
 	 * @param array  $identity Resolved name/email.
 	 * @param object $order    Order object.
+	 * @param array  $address  Resolved destination, empty when not in address mode.
 	 * @return string
 	 */
-	private function customer_key( array $identity, $order ) {
+	private function customer_key( array $identity, $order, array $address = array() ) {
+		$suffix = $this->include_address ? '|to:' . $this->address_fingerprint( $address ) : '';
+
 		if ( '' !== $identity['email'] ) {
-			return 'email:' . strtolower( $identity['email'] );
+			return 'email:' . strtolower( $identity['email'] ) . $suffix;
 		}
 
 		if ( isset( $order->id ) ) {
 			return 'order:' . (string) $order->id;
 		}
 
-		return 'name:' . strtolower( $identity['name'] );
+		return 'name:' . strtolower( $identity['name'] ) . $suffix;
+	}
+
+	/**
+	 * Stable fingerprint of a destination, so trivial formatting differences
+	 * ("1 Main St" vs "1  main st ") don't split one address into two rows.
+	 *
+	 * @param array $address Address parts.
+	 * @return string
+	 */
+	private function address_fingerprint( array $address ) {
+		if ( empty( $address ) ) {
+			return 'none';
+		}
+
+		$parts = array();
+
+		foreach ( array( 'name', 'line_1', 'line_2', 'city', 'state', 'postal_code', 'country' ) as $field ) {
+			$value   = isset( $address[ $field ] ) ? (string) $address[ $field ] : '';
+			$parts[] = strtolower( trim( preg_replace( '/\s+/', ' ', $value ) ) );
+		}
+
+		$joined = implode( '|', $parts );
+
+		if ( '||||||' === $joined ) {
+			return 'none';
+		}
+
+		return md5( $joined );
 	}
 
 	/**
@@ -497,6 +665,7 @@ final class FulfillmentMatrix {
 		return array(
 			'key'           => $key,
 			'label'         => $label,
+			'product_id'    => $product && ! empty( $product->id ) ? (string) $product->id : '',
 			'product_name'  => $product_name,
 			'variant_label' => $variant_label,
 			'position'      => $variant && isset( $variant->position ) && is_numeric( $variant->position ) ? (int) $variant->position : null,
