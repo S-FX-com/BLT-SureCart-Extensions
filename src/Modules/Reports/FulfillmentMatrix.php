@@ -16,6 +16,8 @@
 
 namespace BLT\SCE\Modules\Reports;
 
+use BLT\SCE\Support\Obj;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -166,7 +168,10 @@ final class FulfillmentMatrix {
 	 * @return bool Whether the order contributed anything.
 	 */
 	public function add_order( $order ) {
-		$checkout = is_object( $order ) && isset( $order->checkout ) && is_object( $order->checkout ) ? $order->checkout : null;
+		// Obj::obj(), never isset(): SureCart models resolve attributes through
+		// a magic __get(), which makes isset() report every one of them as
+		// absent. See Support\Obj.
+		$checkout = Obj::obj( $order, 'checkout' );
 
 		if ( ! $checkout ) {
 			return false;
@@ -205,12 +210,10 @@ final class FulfillmentMatrix {
 			$row['name'] = $identity['name'];
 		}
 
-		$order_number = '';
+		$order_number = Obj::str( $order, 'number' );
 
-		if ( isset( $order->number ) && '' !== (string) $order->number ) {
-			$order_number = (string) $order->number;
-		} elseif ( isset( $order->id ) ) {
-			$order_number = (string) $order->id;
+		if ( '' === $order_number ) {
+			$order_number = Obj::str( $order, 'id' );
 		}
 
 		if ( '' !== $order_number && ! in_array( $order_number, $row['order_numbers'], true ) ) {
@@ -320,24 +323,39 @@ final class FulfillmentMatrix {
 				}
 			}
 
-			$row[]         = implode( ', ', $row_meta['order_numbers'] );
-			$row[]         = (string) $row_meta['order_count'];
-			$total_orders += (int) $row_meta['order_count'];
+			$row[] = implode( ', ', $row_meta['order_numbers'] );
+			$row[] = (string) $row_meta['order_count'];
+
+			$cells = array();
 
 			foreach ( $columns as $column ) {
 				$quantity = isset( $this->cells[ $customer_key ][ $column['key'] ] ) ? (int) $this->cells[ $customer_key ][ $column['key'] ] : 0;
 
 				// Blank rather than 0 keeps the grid readable — a
 				// spreadsheet full of zeroes hides the numbers that matter.
-				$row[] = $quantity > 0 ? (string) $quantity : '';
-
-				$column_totals[ $column['key'] ] += $quantity;
-				$row_total                       += $quantity;
+				$cells[ $column['key'] ] = $quantity;
+				$row[]                   = $quantity > 0 ? (string) $quantity : '';
+				$row_total              += $quantity;
 			}
 
-			$row[]        = (string) $row_total;
-			$grand_total += $row_total;
-			$rows[]       = $row;
+			// A customer whose every line counted zero — a zero-quantity
+			// order, or everything excluded by the product filter / the
+			// outstanding basis — would render as an all-blank row. That's
+			// noise on a manufacturing order and actively misleading on a
+			// fulfillment run, so the row is dropped entirely; nothing it
+			// carries belongs in any total.
+			if ( 0 === $row_total ) {
+				continue;
+			}
+
+			foreach ( $cells as $column_key => $quantity ) {
+				$column_totals[ $column_key ] += $quantity;
+			}
+
+			$total_orders += (int) $row_meta['order_count'];
+			$row[]         = (string) $row_total;
+			$grand_total  += $row_total;
+			$rows[]        = $row;
 		}
 
 		// The label cell carries the customer count, so the row is
@@ -448,17 +466,13 @@ final class FulfillmentMatrix {
 	 * @return int
 	 */
 	private function countable_quantity( $line_item ) {
-		$quantity = isset( $line_item->quantity ) ? (int) $line_item->quantity : 0;
+		$quantity = Obj::int( $line_item, 'quantity' );
 
 		if ( ! $this->remaining_only ) {
 			return $quantity;
 		}
 
-		$fulfilled = isset( $line_item->fulfilled_quantity ) && is_numeric( $line_item->fulfilled_quantity )
-			? (int) $line_item->fulfilled_quantity
-			: 0;
-
-		return max( 0, $quantity - $fulfilled );
+		return max( 0, $quantity - Obj::int( $line_item, 'fulfilled_quantity' ) );
 	}
 
 	/**
@@ -478,15 +492,7 @@ final class FulfillmentMatrix {
 	 * @return array
 	 */
 	private function line_items( $checkout ) {
-		$line_items = isset( $checkout->line_items ) ? $checkout->line_items : null;
-
-		if ( is_object( $line_items ) && isset( $line_items->data ) ) {
-			$line_items = $line_items->data;
-		} elseif ( is_array( $line_items ) && isset( $line_items['data'] ) ) {
-			$line_items = $line_items['data'];
-		}
-
-		return is_array( $line_items ) ? $line_items : array();
+		return Obj::items( $checkout, 'line_items' );
 	}
 
 	/**
@@ -501,29 +507,23 @@ final class FulfillmentMatrix {
 	 * @return array{name: string, email: string}
 	 */
 	private function customer_identity( $checkout ) {
-		$customer = isset( $checkout->customer ) && is_object( $checkout->customer ) ? $checkout->customer : null;
+		$customer = Obj::obj( $checkout, 'customer' );
 
 		$name = $this->first_non_empty(
 			array(
-				isset( $checkout->name ) ? $checkout->name : '',
-				$this->join_name(
-					isset( $checkout->first_name ) ? $checkout->first_name : '',
-					isset( $checkout->last_name ) ? $checkout->last_name : ''
-				),
-				$customer && isset( $customer->name ) ? $customer->name : '',
-				$customer ? $this->join_name(
-					isset( $customer->first_name ) ? $customer->first_name : '',
-					isset( $customer->last_name ) ? $customer->last_name : ''
-				) : '',
-				isset( $checkout->inherited_name ) ? $checkout->inherited_name : '',
+				Obj::str( $checkout, 'name' ),
+				$this->join_name( Obj::str( $checkout, 'first_name' ), Obj::str( $checkout, 'last_name' ) ),
+				Obj::str( $customer, 'name' ),
+				$this->join_name( Obj::str( $customer, 'first_name' ), Obj::str( $customer, 'last_name' ) ),
+				Obj::str( $checkout, 'inherited_name' ),
 			)
 		);
 
 		$email = $this->first_non_empty(
 			array(
-				isset( $checkout->email ) ? $checkout->email : '',
-				$customer && isset( $customer->email ) ? $customer->email : '',
-				isset( $checkout->inherited_email ) ? $checkout->inherited_email : '',
+				Obj::str( $checkout, 'email' ),
+				Obj::str( $customer, 'email' ),
+				Obj::str( $checkout, 'inherited_email' ),
 			)
 		);
 
@@ -557,8 +557,10 @@ final class FulfillmentMatrix {
 			return 'email:' . strtolower( $identity['email'] ) . $suffix;
 		}
 
-		if ( isset( $order->id ) ) {
-			return 'order:' . (string) $order->id;
+		$order_id = Obj::str( $order, 'id' );
+
+		if ( '' !== $order_id ) {
+			return 'order:' . $order_id;
 		}
 
 		return 'name:' . strtolower( $identity['name'] ) . $suffix;
@@ -603,8 +605,9 @@ final class FulfillmentMatrix {
 		$address = null;
 
 		foreach ( array( 'shipping_address', 'inherited_shipping_address', 'billing_address' ) as $candidate ) {
-			if ( isset( $checkout->$candidate ) && is_object( $checkout->$candidate ) ) {
-				$address = $checkout->$candidate;
+			$address = Obj::obj( $checkout, $candidate );
+
+			if ( $address ) {
 				break;
 			}
 		}
@@ -616,7 +619,7 @@ final class FulfillmentMatrix {
 		$out = array();
 
 		foreach ( array( 'name', 'line_1', 'line_2', 'city', 'state', 'postal_code', 'country' ) as $field ) {
-			$out[ $field ] = isset( $address->$field ) ? (string) $address->$field : '';
+			$out[ $field ] = Obj::str( $address, $field );
 		}
 
 		return $out;
@@ -629,16 +632,16 @@ final class FulfillmentMatrix {
 	 * @return array|null Column definition, or null when unidentifiable.
 	 */
 	private function column_for( $line_item ) {
-		$variant = isset( $line_item->variant ) && is_object( $line_item->variant ) ? $line_item->variant : null;
-		$price   = isset( $line_item->price ) && is_object( $line_item->price ) ? $line_item->price : null;
-		$product = $price && isset( $price->product ) && is_object( $price->product ) ? $price->product : null;
+		$variant = Obj::obj( $line_item, 'variant' );
+		$price   = Obj::obj( $line_item, 'price' );
+		$product = Obj::obj( $price, 'product' );
 
 		$product_name = $this->first_non_empty(
 			array(
-				$product && isset( $product->name ) ? $product->name : '',
-				$price && isset( $price->name ) ? $price->name : '',
-				$variant && isset( $variant->sku ) ? $variant->sku : '',
-				$product && isset( $product->sku ) ? $product->sku : '',
+				Obj::str( $product, 'name' ),
+				Obj::str( $price, 'name' ),
+				Obj::str( $variant, 'sku' ),
+				Obj::str( $product, 'sku' ),
 			)
 		);
 
@@ -648,14 +651,18 @@ final class FulfillmentMatrix {
 
 		$variant_label = $this->variant_label( $line_item, $variant );
 
+		$variant_id = Obj::str( $variant, 'id' );
+		$product_id = Obj::str( $product, 'id' );
+		$price_id   = Obj::str( $price, 'id' );
+
 		// Column identity prefers the variant, since that's the actual
 		// manufacturable unit (a specific size of a specific shirt).
-		if ( $variant && ! empty( $variant->id ) ) {
-			$key = 'variant:' . (string) $variant->id;
-		} elseif ( $product && ! empty( $product->id ) ) {
-			$key = 'product:' . (string) $product->id . ( '' !== $variant_label ? '|' . $variant_label : '' );
-		} elseif ( $price && ! empty( $price->id ) ) {
-			$key = 'price:' . (string) $price->id;
+		if ( '' !== $variant_id ) {
+			$key = 'variant:' . $variant_id;
+		} elseif ( '' !== $product_id ) {
+			$key = 'product:' . $product_id . ( '' !== $variant_label ? '|' . $variant_label : '' );
+		} elseif ( '' !== $price_id ) {
+			$key = 'price:' . $price_id;
 		} else {
 			$key = 'label:' . strtolower( $product_name . '|' . $variant_label );
 		}
@@ -665,15 +672,15 @@ final class FulfillmentMatrix {
 		return array(
 			'key'           => $key,
 			'label'         => $label,
-			'product_id'    => $product && ! empty( $product->id ) ? (string) $product->id : '',
+			'product_id'    => $product_id,
 			'product_name'  => $product_name,
 			'variant_label' => $variant_label,
-			'position'      => $variant && isset( $variant->position ) && is_numeric( $variant->position ) ? (int) $variant->position : null,
+			'position'      => null === Obj::get( $variant, 'position' ) ? null : Obj::int( $variant, 'position' ),
 			'size_rank'     => $this->size_rank( $variant_label ),
 			'sku'           => $this->first_non_empty(
 				array(
-					$variant && isset( $variant->sku ) ? $variant->sku : '',
-					$product && isset( $product->sku ) ? $product->sku : '',
+					Obj::str( $variant, 'sku' ),
+					Obj::str( $product, 'sku' ),
 				)
 			),
 		);
@@ -694,10 +701,15 @@ final class FulfillmentMatrix {
 	 * @return string
 	 */
 	private function variant_label( $line_item, $variant ) {
-		$values = array();
+		$values  = array();
+		$options = Obj::get( $line_item, 'variant_options' );
 
-		if ( isset( $line_item->variant_options ) && is_array( $line_item->variant_options ) ) {
-			foreach ( $line_item->variant_options as $option ) {
+		if ( $options instanceof \Traversable ) {
+			$options = iterator_to_array( $options );
+		}
+
+		if ( is_array( $options ) ) {
+			foreach ( $options as $option ) {
 				$value = $this->scalarize_option( $option );
 
 				if ( '' !== $value ) {
@@ -708,8 +720,10 @@ final class FulfillmentMatrix {
 
 		if ( empty( $values ) && $variant ) {
 			foreach ( array( 'option_1', 'option_2', 'option_3' ) as $field ) {
-				if ( isset( $variant->$field ) && '' !== trim( (string) $variant->$field ) ) {
-					$values[] = trim( (string) $variant->$field );
+				$value = Obj::str( $variant, $field );
+
+				if ( '' !== $value ) {
+					$values[] = $value;
 				}
 			}
 		}
@@ -729,11 +743,11 @@ final class FulfillmentMatrix {
 			return trim( (string) $option );
 		}
 
-		$bag = is_object( $option ) ? get_object_vars( $option ) : ( is_array( $option ) ? $option : array() );
-
 		foreach ( array( 'value', 'name', 'option', 'label' ) as $key ) {
-			if ( isset( $bag[ $key ] ) && is_scalar( $bag[ $key ] ) ) {
-				return trim( (string) $bag[ $key ] );
+			$value = Obj::str( $option, $key );
+
+			if ( '' !== $value ) {
+				return $value;
 			}
 		}
 

@@ -20,3 +20,9 @@
 
 # Logs
 *.log
+
+# Backtest workspace (tests/backtest/run.sh downloads SureCart's source from
+# WordPress.org on first run; generated CSVs land in tmp-uploads)
+/tests/backtest/surecart-src/
+/tests/backtest/tmp-uploads/
+/tests/backtest/*.zip

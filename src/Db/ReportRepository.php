@@ -118,9 +118,12 @@ final class ReportRepository {
 	 * @param int    $id       Row ID.
 	 * @param string $filename Basename of the generated CSV.
 	 * @param array  $counts   Keys: row_count, column_count, item_count, orders_matched, orders_scanned, truncated.
+	 * @param string $note     Optional diagnostic shown alongside the finished
+	 *                         report — used when a run completes but returned
+	 *                         nothing, so "0 items" comes with a reason.
 	 * @return void
 	 */
-	public function mark_complete( $id, $filename, array $counts ) {
+	public function mark_complete( $id, $filename, array $counts, $note = '' ) {
 		$this->update(
 			$id,
 			array(
@@ -132,7 +135,7 @@ final class ReportRepository {
 				'orders_matched' => isset( $counts['orders_matched'] ) ? (int) $counts['orders_matched'] : 0,
 				'orders_scanned' => isset( $counts['orders_scanned'] ) ? (int) $counts['orders_scanned'] : 0,
 				'truncated'      => ! empty( $counts['truncated'] ) ? 1 : 0,
-				'last_error'     => null,
+				'last_error'     => '' !== (string) $note ? substr( (string) $note, 0, 1000 ) : null,
 				'completed_at'   => current_time( 'mysql', true ),
 			)
 		);

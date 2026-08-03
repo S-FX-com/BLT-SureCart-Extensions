@@ -450,8 +450,12 @@ final class AdminPage {
 		// Products.
 		echo '<tr><th scope="row"><label for="blt-sce-products">' . esc_html__( 'Products', 'blt-surecart-extensions' ) . '</label></th><td>';
 
-		if ( empty( $products ) ) {
+		if ( empty( $products ) && $this->products->is_cold() ) {
 			echo '<p><em>' . esc_html__( 'The product list has not been cached yet. A background job has been queued to fetch it — reload this page in a moment. Until then, the report will cover all products.', 'blt-surecart-extensions' ) . '</em></p>';
+		} elseif ( empty( $products ) ) {
+			// Refreshed, but came back with nothing — a real fault worth saying
+			// out loud rather than repeating "not cached yet" forever.
+			echo '<p><em>' . esc_html__( 'The product list was refreshed but SureCart returned no products, so there is nothing to choose from and reports will cover all products. This usually means the store connection cannot read products — check SureCart is connected, then use "Refresh product list" to retry.', 'blt-surecart-extensions' ) . '</em></p>';
 		} else {
 			echo '<select id="blt-sce-products" name="product_ids[]" multiple size="10" style="min-width:26em;max-width:100%">';
 
@@ -619,6 +623,12 @@ final class AdminPage {
 
 				if ( ! empty( $row['truncated'] ) ) {
 					echo '<br /><span style="color:#b32d2e">' . esc_html__( 'Hit the page ceiling — may be incomplete.', 'blt-surecart-extensions' ) . '</span>';
+				}
+
+				// A completed-but-empty report carries a diagnostic explaining
+				// which of the several possible reasons applied.
+				if ( ! empty( $row['last_error'] ) ) {
+					echo '<br /><span style="color:#b32d2e">' . esc_html( $row['last_error'] ) . '</span>';
 				}
 			} else {
 				echo '&mdash;';

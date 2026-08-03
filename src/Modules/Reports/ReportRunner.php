@@ -17,6 +17,7 @@ namespace BLT\SCE\Modules\Reports;
 use BLT\SCE\Api\SureCartGateway;
 use BLT\SCE\Db\ReportRepository;
 use BLT\SCE\Support\Logger;
+use BLT\SCE\Support\Obj;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -149,15 +150,78 @@ final class ReportRunner {
 			return;
 		}
 
-		$this->repository->mark_complete( $report_id, $result['filename'], $result['counts'] );
+		$this->repository->mark_complete( $report_id, $result['filename'], $result['counts'], $result['note'] );
 
 		$this->logger->info(
 			'Fulfillment report generated.',
 			array(
 				'report_id' => $report_id,
 				'counts'    => $result['counts'],
+				'note'      => $result['note'],
 			)
 		);
+	}
+
+	/**
+	 * Explain a run that scanned zero orders.
+	 *
+	 * "0 of 0 orders matched" has two very different causes — the store really
+	 * returned no orders for these filters, or we failed to read the response
+	 * we were given — and they need opposite fixes. So when a run comes up
+	 * empty, ask for a single unfiltered order and report what came back. The
+	 * probe never feeds the report; it only annotates it.
+	 *
+	 * @param string $list_shape Runtime shape of the filtered list response.
+	 * @param array  $filters    Filters that were applied.
+	 * @return string Diagnostic note, empty when nothing useful can be said.
+	 */
+	private function diagnose_empty( $list_shape, array $filters ) {
+		$probe = $this->gateway->probe_orders();
+
+		if ( is_wp_error( $probe ) ) {
+			return sprintf(
+				/* translators: 1: filtered response shape, 2: error message */
+				__( 'No orders were returned. Filtered response was %1$s. An unfiltered probe query also failed: %2$s', 'blt-surecart-extensions' ),
+				$list_shape,
+				$probe->get_error_message()
+			);
+		}
+
+		$probe_returned = count( $probe['data'] );
+
+		if ( $probe_returned > 0 || $probe['count'] > 0 ) {
+			// The store does return orders without filters, so the filters (or
+			// the date window) are what excluded everything.
+			return sprintf(
+				/* translators: 1: reported total order count, 2: applied filters */
+				__( 'No orders matched. The store does return orders (SureCart reports %1$d in total), so the filters excluded everything: %2$s. Check the order status and date range.', 'blt-surecart-extensions' ),
+				$probe['count'],
+				$this->describe_filters( $filters )
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: filtered response shape, 2: unfiltered response shape */
+			__( 'No orders were returned even with no filters applied, so this is not a filter problem. Response shapes — filtered: %1$s; unfiltered: %2$s. Send this line to your developer.', 'blt-surecart-extensions' ),
+			$list_shape,
+			$probe['shape']
+		);
+	}
+
+	/**
+	 * Compact, human-readable rendering of the applied query filters.
+	 *
+	 * @param array $filters Filters passed to the gateway.
+	 * @return string
+	 */
+	private function describe_filters( array $filters ) {
+		$parts = array();
+
+		foreach ( $filters as $key => $value ) {
+			$parts[] = $key . '=' . ( is_array( $value ) ? implode( '|', $value ) : (string) $value );
+		}
+
+		return empty( $parts ) ? __( 'none', 'blt-surecart-extensions' ) : implode( ', ', $parts );
 	}
 
 	/**
@@ -168,6 +232,7 @@ final class ReportRunner {
 	public function refresh_products() {
 		$products = array();
 		$page     = 1;
+		$shape    = '';
 
 		do {
 			$result = $this->gateway->list_products_page( $page );
@@ -184,8 +249,21 @@ final class ReportRunner {
 				return;
 			}
 
+			if ( 1 === $page ) {
+				$shape = isset( $result['shape'] ) ? $result['shape'] : '';
+
+				$this->logger->debug(
+					'Report product page 1 response.',
+					array(
+						'shape'    => $shape,
+						'reported' => (int) $result['count'],
+						'returned' => count( $result['data'] ),
+					)
+				);
+			}
+
 			foreach ( $result['data'] as $product ) {
-				$id = is_object( $product ) && isset( $product->id ) ? (string) $product->id : '';
+				$id = Obj::str( $product, 'id' );
 
 				if ( '' === $id ) {
 					continue;
@@ -193,13 +271,36 @@ final class ReportRunner {
 
 				$products[] = array(
 					'id'   => $id,
-					'name' => isset( $product->name ) && '' !== trim( (string) $product->name ) ? (string) $product->name : $id,
+					'name' => Obj::str( $product, 'name', $id ),
 				);
 			}
 
 			$fetched = count( $result['data'] );
 			++$page;
 		} while ( $fetched >= SureCartGateway::MAX_PER_PAGE && $page <= self::MAX_PAGES );
+
+		// Never replace a working list with an empty one. An empty result is
+		// far more likely to mean the query or the response parsing broke than
+		// that the store genuinely lost all its products, and overwriting would
+		// destroy a picker that was working a moment ago.
+		if ( empty( $products ) && ! $this->products->is_cold() ) {
+			$this->logger->warning(
+				'Product refresh returned nothing; keeping the previously cached list.',
+				array(
+					'shape'   => $shape,
+					'existing' => count( $this->products->all() ),
+				)
+			);
+
+			return;
+		}
+
+		if ( empty( $products ) ) {
+			$this->logger->warning(
+				'Product refresh returned no products. The picker will stay empty and reports will cover all products.',
+				array( 'shape' => $shape )
+			);
+		}
 
 		$this->products->store( $products );
 
@@ -245,10 +346,12 @@ final class ReportRunner {
 			)
 		);
 
-		$scanned   = 0;
-		$matched   = 0;
-		$page      = 1;
-		$truncated = false;
+		$scanned    = 0;
+		$matched    = 0;
+		$page       = 1;
+		$truncated  = false;
+		$list_shape = '';
+		$reported   = 0;
 
 		while ( true ) {
 			if ( $page > self::MAX_PAGES ) {
@@ -275,6 +378,22 @@ final class ReportRunner {
 			$orders  = $result['data'];
 			$fetched = count( $orders );
 
+			if ( 1 === $page ) {
+				$list_shape = isset( $result['shape'] ) ? $result['shape'] : '';
+				$reported   = (int) $result['count'];
+
+				$this->logger->debug(
+					'Report order page 1 response.',
+					array(
+						'report_id' => $report_id,
+						'shape'     => $list_shape,
+						'reported'  => $reported,
+						'returned'  => $fetched,
+						'filters'   => $filters,
+					)
+				);
+			}
+
 			foreach ( $orders as $order ) {
 				++$scanned;
 
@@ -298,6 +417,28 @@ final class ReportRunner {
 		}
 
 		$table = $matrix->to_table();
+
+		$note = '';
+
+		if ( 0 === $scanned ) {
+			$note = $this->diagnose_empty( $list_shape, $filters );
+
+			$this->logger->warning(
+				'Report scanned zero orders.',
+				array(
+					'report_id' => $report_id,
+					'shape'     => $list_shape,
+					'reported'  => $reported,
+					'note'      => $note,
+				)
+			);
+		} elseif ( 0 === $matched ) {
+			$note = sprintf(
+				/* translators: %d: number of orders scanned */
+				__( '%d orders were returned but none fell inside the date range. Check the range against the orders\' creation dates.', 'blt-surecart-extensions' ),
+				$scanned
+			);
+		}
 
 		if ( $matrix->unidentified_skipped() > 0 ) {
 			$this->logger->warning(
@@ -324,6 +465,7 @@ final class ReportRunner {
 
 		return array(
 			'filename' => $filename,
+			'note'     => $note,
 			'counts'   => array_merge(
 				$table['counts'],
 				array(
@@ -398,11 +540,15 @@ final class ReportRunner {
 			return true;
 		}
 
-		if ( ! is_object( $order ) || ! isset( $order->created_at ) || ! is_numeric( $order->created_at ) ) {
+		// Obj::get(), not isset(): isset() reports false for every attribute on
+		// a magic-accessor model, which would silently exclude every order.
+		$created_at = Obj::get( $order, 'created_at' );
+
+		if ( ! is_numeric( $created_at ) ) {
 			return false;
 		}
 
-		$created_at = (int) $order->created_at;
+		$created_at = (int) $created_at;
 
 		if ( null !== $window['start'] && $created_at < $window['start'] ) {
 			return false;
