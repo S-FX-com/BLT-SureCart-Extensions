@@ -11,6 +11,7 @@ namespace BLT\SCE;
 use BLT\SCE\Db\Schema;
 use BLT\SCE\Modules\MakeAnOffer\Module as MakeAnOfferModule;
 use BLT\SCE\Modules\ModuleRegistry;
+use BLT\SCE\Modules\Reports\Module as ReportsModule;
 use BLT\SCE\Modules\RestrictPriceByRole\Module as RestrictPriceByRoleModule;
 use BLT\SCE\Modules\ShippoFulfillment\Module as ShippoFulfillmentModule;
 use BLT\SCE\Support\Logger;
@@ -79,6 +80,11 @@ final class Plugin {
 	public function init() {
 		load_plugin_textdomain( 'blt-surecart-extensions', false, dirname( BLT_SCE_BASENAME ) . '/languages' );
 
+		// Activation hooks don't re-run on an in-place plugin update, which
+		// is how this plugin ships — so a table introduced by a later
+		// version has to be created here instead.
+		Schema::maybe_upgrade();
+
 		Scheduler::init();
 
 		// Register modules. Each module is independently toggleable —
@@ -87,6 +93,7 @@ final class Plugin {
 		$this->modules->register( new ShippoFulfillmentModule( $this->logger ) );
 		$this->modules->register( new RestrictPriceByRoleModule( $this->logger ) );
 		$this->modules->register( new MakeAnOfferModule( $this->logger ) );
+		$this->modules->register( new ReportsModule( $this->logger ) );
 		$this->modules->boot_enabled();
 
 		if ( is_admin() ) {

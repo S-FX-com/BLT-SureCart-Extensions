@@ -15,6 +15,7 @@ namespace BLT\SCE\Api;
 
 use SureCart\Models\Fulfillment;
 use SureCart\Models\Order;
+use SureCart\Models\Product;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -41,6 +42,30 @@ final class SureCartGateway {
 	);
 
 	/**
+	 * Expand paths for the Reports module's order listing: everything
+	 * ORDER_EXPANDS covers, plus the customer object (the order itself
+	 * carries no name/email — discovery §H). 7 of the 15 allowed expands,
+	 * none deeper than the documented two levels.
+	 *
+	 * @var string[]
+	 */
+	const REPORT_ORDER_EXPANDS = array(
+		'checkout',
+		'checkout.line_items',
+		'checkout.customer',
+		'checkout.shipping_address',
+		'line_item.price',
+		'line_item.variant',
+		'price.product',
+	);
+
+	/**
+	 * Maximum page size SureCart allows on a list endpoint ("The number of
+	 * items per page. The default is 20 and the maximum is 100").
+	 */
+	const MAX_PER_PAGE = 100;
+
+	/**
 	 * Retrieve an order with everything this module needs expanded.
 	 *
 	 * @param string $order_id SureCart order UUID.
@@ -48,6 +73,140 @@ final class SureCartGateway {
 	 */
 	public function get_order( $order_id ) {
 		return Order::with( self::ORDER_EXPANDS )->find( $order_id );
+	}
+
+	/**
+	 * Fetch one page of orders for a report, expanded down to line items,
+	 * variants, products and the customer.
+	 *
+	 * Blocking HTTP by SureCart's own design, like every other call in this
+	 * class — only ever called from inside an Action Scheduler job.
+	 *
+	 * Note the deliberate absence of any date argument: `GET /v1/orders`
+	 * documents no date and no sort parameter (discovery §H), so callers
+	 * filter on `created_at` themselves and must not assume page ordering.
+	 *
+	 * @param int   $page    1-based page number.
+	 * @param array $filters Query filters. Recognized keys, all verified as
+	 *                       real query params: `status` (string[]),
+	 *                       `product_ids` (string[]), `fulfillment_status`
+	 *                       (string[]).
+	 * @return array|\WP_Error {
+	 *     @type array $data       Order objects for this page.
+	 *     @type int   $count      Total matching records across all pages.
+	 *     @type int   $page       Page returned.
+	 *     @type int   $limit      Page size used.
+	 * }
+	 */
+	public function list_orders_page( $page, array $filters = array() ) {
+		$query = array( 'page' => max( 1, (int) $page ) );
+
+		// SureCart's array query params are the bracketed names in the docs
+		// (status[], product_ids[], fulfillment_status[]); the PHP models'
+		// where() takes the unbracketed key with an array value and
+		// serializes the brackets itself.
+		foreach ( array( 'status', 'product_ids', 'fulfillment_status' ) as $key ) {
+			if ( ! empty( $filters[ $key ] ) && is_array( $filters[ $key ] ) ) {
+				$query[ $key ] = array_values( $filters[ $key ] );
+			}
+		}
+
+		try {
+			$result = Order::where( $query )
+				->with( self::REPORT_ORDER_EXPANDS )
+				->paginate(
+					array(
+						'per_page' => self::MAX_PER_PAGE,
+						'page'     => max( 1, (int) $page ),
+					)
+				);
+		} catch ( \Exception $e ) {
+			return new \WP_Error( 'blt_sce_order_list_failed', $e->getMessage() );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return self::normalize_page( $result, $page, self::MAX_PER_PAGE );
+	}
+
+	/**
+	 * Fetch one page of non-archived products (id + name only), for the
+	 * report product picker. Sorted by name — `sort` is a documented param
+	 * on `GET /v1/products` (unlike orders).
+	 *
+	 * Job-only, same as everything else here.
+	 *
+	 * @param int $page 1-based page number.
+	 * @return array|\WP_Error Same envelope as list_orders_page().
+	 */
+	public function list_products_page( $page ) {
+		try {
+			$result = Product::where(
+				array(
+					'archived' => false,
+					'sort'     => 'name',
+				)
+			)->paginate(
+				array(
+					'per_page' => self::MAX_PER_PAGE,
+					'page'     => max( 1, (int) $page ),
+				)
+			);
+		} catch ( \Exception $e ) {
+			return new \WP_Error( 'blt_sce_product_list_failed', $e->getMessage() );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return self::normalize_page( $result, $page, self::MAX_PER_PAGE );
+	}
+
+	/**
+	 * Flatten a paginated model result into a predictable array envelope.
+	 *
+	 * The documented shape is `{ object, pagination: { count, limit, page },
+	 * data: [] }`, but the models may hand it back as an array or an object
+	 * depending on version, so both are handled rather than assumed.
+	 *
+	 * @param mixed $result           Raw paginate() return value.
+	 * @param int   $requested_page   Page that was asked for, used as a fallback.
+	 * @param int   $requested_limit  Page size that was asked for, used as a fallback.
+	 * @return array
+	 */
+	private static function normalize_page( $result, $requested_page, $requested_limit ) {
+		$data       = array();
+		$pagination = null;
+
+		if ( is_array( $result ) ) {
+			$data       = isset( $result['data'] ) ? $result['data'] : array();
+			$pagination = isset( $result['pagination'] ) ? $result['pagination'] : null;
+		} elseif ( is_object( $result ) ) {
+			$data       = isset( $result->data ) ? $result->data : array();
+			$pagination = isset( $result->pagination ) ? $result->pagination : null;
+		}
+
+		$pick = static function ( $bag, $key, $default ) {
+			if ( is_array( $bag ) && isset( $bag[ $key ] ) ) {
+				return (int) $bag[ $key ];
+			}
+
+			if ( is_object( $bag ) && isset( $bag->$key ) ) {
+				return (int) $bag->$key;
+			}
+
+			return $default;
+		};
+
+		return array(
+			'data'  => is_array( $data ) ? $data : array(),
+			'count' => $pick( $pagination, 'count', 0 ),
+			'page'  => $pick( $pagination, 'page', (int) $requested_page ),
+			'limit' => $pick( $pagination, 'limit', (int) $requested_limit ),
+		);
 	}
 
 	/**

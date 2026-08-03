@@ -105,6 +105,45 @@ Question: can an accepted offer (already charged via the module's own Stripe int
 - **Auth:** these platform endpoints take a Bearer API token created by the merchant in the SureCart dashboard. The PHP models docs (`documentation/php-models.md`) only document CRUD (`save`/`update`/`delete`) — the `finalize`/`manually_pay` verbs are **not** documented on models, so `Api\SureCartApiClient` calls the REST endpoints directly with the token instead of going through models. Calls run only inside Action Scheduler jobs, per rule 1.
 - **UNVERIFIED (flagged, handled defensively):** (a) whether an `archived: true` ad-hoc price can still be checked out via the API — the module leaves the price unarchived and names it clearly ("Accepted Offer — <product>"); it can be hidden from the storefront with the Restrict Price by Role module (the WP-side `surecart/checkout/validate` gate does not run for direct platform-API checkouts, so restriction doesn't block the back-fill). (b) Whether tax is computed on a manual-payment finalize — verify in test mode before relying on SureCart tax reports for offer orders.
 
+## H. Aggregating sales data across a date range (Reports module)
+
+Question: how do we list many orders over a time period, with enough line-item detail to itemize product **and variant** (shirt size) quantities per customer? Answered from `developer.surecart.com` OpenAPI specs (`openapi/v1/orders.json`, `openapi/v1/products.json`, both fetched 2026-08-03) + `documentation/php-models.md` + `api-reference/expanding-responses.md`.
+
+**The single most important finding: `GET /v1/orders` has NO date filter and NO sort parameter.** The complete, exhaustive parameter list from the spec is:
+
+```
+checkout_ids[]  customer_ids[]  fulfillment_status[]  ids[]  limit  live_mode
+order_type[]  page  product_ids[]  query  return_status[]  shipment_status[]  status[]
+```
+
+There is no `created_at`, no `created_at[gte]`, no `date`, no `sort`, no `order`. Compare `GET /v1/products`, which *does* document `sort` ("Available sorting columns for this endpoint are `cataloged_at`, `created_at`, `name`, and `updated_at`") — so the absence on orders is a real difference between endpoints, not a gap in the spec's conventions.
+
+**Consequences, and why the module is built the way it is:**
+
+1. **The date range is applied client-side**, in PHP, against `order.created_at` (confirmed `integer`, "Time at which the object was created. Measured in seconds since the Unix epoch"). This is exact, not approximate — there's no ambiguity to a unix timestamp comparison. `ReportRunner` converts the admin's date inputs from site timezone (`wp_timezone()`) to UTC bounds, end-of-day inclusive.
+2. **Because there is no sort parameter, pagination order is undefined and the run cannot early-exit** once it "passes" the start date — a cheap optimization that would silently drop orders. `ReportRunner` therefore walks every page of the server-side-filtered set and reports `orders_scanned` alongside `orders_matched` in the finished report, so the numbers are auditable rather than mysterious.
+3. **Server-side narrowing that *is* verified** and is applied before the client-side date filter: `status[]` (order status enum is confirmed as exactly `draft`, `paid`, `payment_failed`, `processing`, `void` — the report defaults to `paid`), `product_ids[]` ("Only return objects that belong to the given products" — this is what backs the product-selection feature), and `fulfillment_status[]` (enum confirmed `fulfilled`, `partially_fulfilled`, `unfulfilled`).
+4. `POST /v1/orders/filter` **does** exist and `GET /v1/orders/filter_schema` confirms `created_at` is filterable as `type: date` with operators `is, is_not, is_after, is_before, is_on_or_after, is_on_or_before`. **We deliberately do not use it.** The `comparison_value` wire format for a date is documented only as `type: string` with the description "The value to compare against" — no format, no example, and no way to verify it without a live token. Nothing documents whether the filter endpoint honors `expand[]` or pagination either. Guessing a date serialization is exactly the class of mistake CLAUDE.md forbids. **UNVERIFIED, and intentionally unused** — if the format is ever confirmed against a live store, `ReportRunner::fetch_page()` is the one place that would change, and the client-side date filter would remain as a correctness backstop.
+
+**Pagination**, confirmed identical in the spec's `list_response` envelope and in `php-models.md`: response is `{ object, pagination: { count, limit, page }, data: [] }`; `limit` is "The number of items per page. The default is `20` and the maximum is `100`". The PHP models expose this as `paginate([ 'per_page' => N, 'page' => N ])` — note the model method's key is **`per_page`**, while the REST query param is **`limit`**; `php-models.md`'s own example uses `per_page`, which is what `SureCartGateway` passes.
+
+**Expansion works on list endpoints** — confirmed verbatim from `api-reference/expanding-responses.md`: *"You can use the expand request parameter on any endpoint which returns expandable fields, including list, create, and update endpoints."* Limits: *"Expansions have a maximum depth of two levels"* and *"you can expand up to 15 objects"*. The path convention for collections is confirmed too: *"if you wanted to retrieve a checkout's line items and each line item's price, you would pass list_items and list_item.price as expand parameters"* — plural for the collection, singular type-name for what hangs off each member. This is the same convention already used by `SureCartGateway::ORDER_EXPANDS`. The report uses 7 of the 15 allowed: `checkout`, `checkout.line_items`, `checkout.customer`, `checkout.shipping_address`, `line_item.price`, `line_item.variant`, `price.product`.
+
+**Variant options — the field that makes size columns possible.** Two confirmed fields on `line_item_response`:
+
+- `variant_options` — array, nullable, *"An array of the associated variant's options."* → the **values** (`XL`, `Red`).
+- `variant_option_names` — array, nullable, *"An array of the associated product's variant option names."* → the **labels** (`Size`, `Color`).
+
+Neither declares an `items` schema in the spec, so the element type is **UNVERIFIED** (string vs. object). `FulfillmentMatrix::variant_label()` handles both defensively: scalars are used directly, and for array/object elements it reads a `value`/`name`/`option` key before falling back to discarding the element. The independently-confirmed fallback is `variant_response`, which does declare flat strings: `option_1` *"The value for the first variant option"*, `option_2`, `option_3`, plus `option_names` (array) and `position` *"The ordering position of this variant when displayed to customers"* — `position` is what the report sorts size columns by, so column order matches the merchant's own variant ordering (S, M, L, XL) rather than alphabetical (L, M, S, XL).
+
+**Customer name and email** are **not on the order object** — `order_response` has no customer, email, or name field at all. They live on the expanded checkout, all confirmed on `checkout_response`: `name` *"The customer's full name or business name. If set, this will take precedence"*, `first_name`, `last_name`, `email`, plus `inherited_name` / `inherited_email` (*"controlled by"* the checkout-or-customer precedence rules) and the expandable `customer` → `customer_response` (`name`, `first_name`, `last_name`, `email`). `FulfillmentMatrix::customer_identity()` resolves in that documented precedence order: `checkout.name` → `first_name last_name` → `customer.name` → `customer.first/last` → `inherited_name`, and email `checkout.email` → `customer.email` → `inherited_email`.
+
+**Product name:** `product_response.name`, *"The product name, meant to be displayable to the customer."* Reached via `line_item.price.product.name` with the expands above.
+
+**Quantity:** `line_item_response.quantity` *"The quantity of products being purchased"* (integer). Also confirmed present and deliberately **not** used as the report's quantity: `fulfilled_quantity` *"The quantity of products that have been fulfilled."* A manufacturer order needs what was *bought*, so the matrix counts `quantity`; `fulfilled_quantity` would undercount every unshipped order to zero, which is the exact opposite of useful here.
+
+**Product picker:** `GET /v1/products` with `archived` (*"Only return objects that are archived or not archived"* — and `Product::where(['archived' => false])->get()` is literally the worked example in `php-models.md`), `sort=name`, `limit`, `page`. Cached in a transient and refreshed by an Action Scheduler job so the picker never makes SureCart calls during an admin page render (rule 1).
+
 ## Net effect on the build
 
 - Order-paid trigger: `surecart/order_updated` WP hook, checked for `status === 'paid'`, per §A.
@@ -112,5 +151,6 @@ Question: can an accepted offer (already charged via the module's own Stripe int
 - Reconciliation sweep (spec §4/tasks/04) remains fully justified and is **not** made redundant by anything found here — SureCart never independently re-fetches tracking state, so our own sweep is the only thing that ever re-checks a shipment if a webhook is missed.
 - Webhook security defaults to URL token + IP allowlist (self-service), with optional HMAC layered in for sites that complete Shippo's manual setup.
 - PressShip used for packaging/linting only; GitHub Releases handled by a dedicated workflow.
+- Reports module: orders listed via the PHP models' `where()`/`paginate()`/`with()` over `GET /v1/orders`, narrowed server-side by `status[]`/`product_ids[]`/`fulfillment_status[]`, date-filtered client-side on `created_at` because the endpoint has no date or sort parameter (§H).
 
 No hook, endpoint, or field name in the code that follows was invented — everything above traces to a quoted primary source.

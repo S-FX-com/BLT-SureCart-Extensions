@@ -8,10 +8,11 @@ Guidance for Claude Code (or any AI agent) working in this repository.
 
 Slug: `blt-surecart-extensions` · PHP prefix: `blt_sce_` · Text domain: `blt-surecart-extensions` · Namespace: `BLT\SCE`.
 
-This build ships three modules, each independently toggleable from the Modules screen:
+This build ships four modules, each independently toggleable from the Modules screen:
 
 - **Shippo Fulfillment** — purchases a Shippo shipping label after a SureCart order is paid, writes tracking back to SureCart, and keeps shipment status in sync. It does **not** touch checkout rate calculation or order totals — that's explicitly out of scope, permanently, not just for this build.
 - **Restrict Price by Role** — hides SureCart prices from users without an allowed WordPress role and rejects restricted prices at checkout. Consolidated from the standalone `SureCart-RestrictPriceByRole` repo; it deliberately keeps that plugin's `scrpbr_restrictions` option key so existing site data carries over with zero migration.
+- **Reports** — generates a **Fulfillment Report** CSV: every order in a date range (optionally narrowed to selected products) collapsed into one row per customer with a quantity column per product variant, plus a TOTALS row for placing the manufacturing order. Read-only — it never writes to SureCart and never touches checkout. The one thing to know before changing it: **`GET /v1/orders` has no date filter and no sort parameter** (exhaustively verified in `tasks/00-discovery.md` §H), so the date range is applied in PHP against `order.created_at` and the job cannot early-exit on a date boundary. Don't "optimize" that into an early break — page order is undefined and you'd silently drop orders.
 - **Make an Offer** — eBay-style offers with a Stripe-vaulted card, charged off-session on acceptance. Implemented from the `Blt-SureCart-Offers` repo's scaffold spec (that repo contained no code). After a successful charge, the offer is back-filled into SureCart as a real order via the manually-paid-checkout flow (`OrderRecorder` — ad_hoc price + create/finalize(manual)/manually_pay, all verified in `tasks/00-discovery.md` §G). Orders can't be created directly (SureCart's Orders API is list/retrieve only), and native checkouts expose no authorize-only switch, which is why the charge itself stays on the module's own Stripe integration.
 
 ## Before you touch anything: read `tasks/00-discovery.md`
@@ -51,6 +52,14 @@ src/Modules/                   ModuleRegistry + ModuleInterface — each module 
     AdminPage.php + OffersListTable.php   Offers screen, detail view, actions, settings, admin-bar badge
     Frontend.php                  [sc_make_an_offer] shortcode + Stripe.js modal form
     CounterToken.php              HMAC tokens for counter-offer email links
+  Reports/                       Same pattern again
+    Module.php                    Job-handler + admin hooks, nothing else
+    ReportRunner.php              Action Scheduler job: pages orders, applies the date window, writes the CSV
+    FulfillmentMatrix.php         The aggregation: customers x product-variants -> quantities (+ TOTALS row)
+    CsvWriter.php                 UTF-8 BOM + formula-injection-safe CSV output
+    ReportStorage.php             Protected uploads subdir, unguessable filenames, path validation
+    ProductIndex.php              Option-cached product list for the picker (refreshed by a job, never on render)
+    AdminPage.php                 Request form, reports list, nonce+capability-checked download/delete
 src/Api/
   ShippoClient.php               All Shippo HTTP, logged, timed out, never called outside a job
   StripeClient.php               All Stripe HTTP, same conventions (no SDK; form-encoded; Stripe-Account aware)
@@ -60,10 +69,13 @@ src/Rest/
   ShippoWebhookController.php    Tracking webhook receiver + security
   OfferController.php            sc-offer/v1 customer endpoints (submit/confirm/counter-response)
 src/Admin/                       Settings, Modules, Shipments list table, Review Queue, Site Health — all server-rendered, no build step
-src/Db/                          Schema (dbDelta) + ShipmentRepository (all $wpdb access lives here, nowhere else)
+src/Db/                          Schema (dbDelta) + ShipmentRepository / ReportRepository
+                                 (all $wpdb access lives here, nowhere else)
 src/Support/                     Logger, Scheduler (Action Scheduler wrapper), Money (decimal-safe cents), UpdateChecker
 assets/                          Per-module frontend/admin JS+CSS (vanilla, no build step)
 ```
+
+**Async-rule note for Reports** (rule 1 below still governs, with no exceptions taken): report generation is entirely job-side. The admin screen renders from the local reports table and `ProductIndex`'s option-backed product cache, which an Action Scheduler job populates — so the product picker never makes a SureCart call during a page render. If you add a report that needs data the cache doesn't have, refresh the cache from a job; don't reach for SureCart in `render()`.
 
 **Async-rule clarifications for Make an Offer** (rule 1 below still governs): the card-charging and PM-release Stripe calls run only inside Action Scheduler jobs, with an idempotency key so a re-run can't double-charge. Two narrow, deliberate exceptions run synchronously in the customer's REST request because the flow is impossible otherwise: SetupIntent creation (its client_secret must go back in the /submit response for Stripe.js) and a transient-cached (15 min/product) SureCart list-price lookup for server-side offer validation. Neither spends money.
 
@@ -75,11 +87,12 @@ assets/                          Per-module frontend/admin JS+CSS (vanilla, no b
 4. **`auto_purchase` defaults off.** Any new purchase path must still route through `Guardrails` and land in the review queue when guardrails aren't satisfied or auto-purchase is off.
 5. **The kill switch (`Guardrails::is_halted()`) is an absolute stop** — it must be checked first, before anything else, in any code path that could result in a Shippo purchase, and it is never bypassable (not even by an explicit manual admin action, unlike a guardrail hold).
 6. Nonce + capability check on every admin action; sanitize input, escape output; every string user-facing goes through `__()`/`esc_html__()` with the `blt-surecart-extensions` text domain.
-7. Uninstall never destroys shipment history unless the site owner has explicitly opted in (`SettingsPage::OPT_DELETE_ON_UNINSTALL`).
+7. Uninstall never destroys shipment history unless the site owner has explicitly opted in (`SettingsPage::OPT_DELETE_ON_UNINSTALL`). The same opt-in — and only that opt-in — also removes generated report CSVs from `uploads/blt-sce-reports/`; anything holding customer PII must be cleaned up under it, so add new artifacts to `uninstall.php` when you create them.
+8. **Any table added after 1.0.0 needs `Db\Schema::DB_VERSION` bumped.** This plugin updates in place from GitHub Releases, and WordPress does **not** re-run activation hooks on update — `Schema::maybe_upgrade()` on `plugins_loaded` is the only thing that creates a new table on an existing site. Adding a `CREATE TABLE` without bumping the version ships a module that's broken everywhere except fresh installs.
 
-## Adding a second module
+## Adding another module
 
-Register it in `Plugin::init()` alongside `ShippoFulfillmentModule`. It needs its own slug, its own admin submenu(s) under `blt-sce-modules`, and its own `unmet_requirements()`. Nothing in `ModuleRegistry` needs to change — that's the point of it.
+Register it in `Plugin::init()` alongside the existing modules. It needs its own slug, its own admin submenu(s) under `blt-sce-modules`, and its own `unmet_requirements()`. Nothing in `ModuleRegistry` needs to change — that's the point of it. `Modules\Reports` is the most recent worked example and the smallest one to copy from: one hooks-only `Module.php`, hook-free services around it, and a job for anything that talks to SureCart.
 
 ## Local dev / CI
 
