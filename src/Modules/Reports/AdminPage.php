@@ -341,8 +341,13 @@ final class AdminPage {
 			set_transient( self::REFRESH_GUARD, 1, 5 * MINUTE_IN_SECONDS );
 		}
 
-		echo '<div class="wrap">';
-		echo '<h1>' . esc_html__( 'BLT SureCart Extensions — Reports', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-reports-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'BLT SureCart Extensions', 'blt-surecart-extensions' );
+		echo ' <span class="blt-admin-page-header-sub">' . esc_html__( 'Reports', 'blt-surecart-extensions' ) . '</span>';
+		echo '</h1></div>';
 
 		$this->render_notice();
 		$this->render_form();
@@ -430,25 +435,26 @@ final class AdminPage {
 		$today        = current_time( 'Y-m-d' );
 		$month_start  = current_time( 'Y-m-01' );
 
-		echo '<h2>' . esc_html__( 'Fulfillment Report', 'blt-surecart-extensions' ) . '</h2>';
-		echo '<p class="description" style="max-width:60em">' . esc_html__( 'Aggregates every order in a date range into one row per customer, with a column for each product variant (for example each shirt size) holding the quantity that customer ordered. A TOTALS row at the bottom gives the per-variant quantities to order from the manufacturer.', 'blt-surecart-extensions' ) . '</p>';
-
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( self::NONCE_CREATE );
 		echo '<input type="hidden" name="action" value="blt_sce_create_report" />';
 
-		echo '<table class="form-table" role="presentation"><tbody>';
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-header"><h2>' . esc_html__( 'Fulfillment Report', 'blt-surecart-extensions' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Aggregates every order in a date range into one row per customer, with a column for each product variant (for example each shirt size) holding the quantity that customer ordered. A TOTALS row at the bottom gives the per-variant quantities to order from the manufacturer.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div>';
+		echo '<div class="blt-card-body">';
 
 		// Date range.
-		echo '<tr><th scope="row"><label for="blt-sce-start-date">' . esc_html__( 'Date range', 'blt-surecart-extensions' ) . '</label></th><td>';
+		echo '<div class="blt-field"><div class="blt-field-label"><label for="blt-sce-start-date">' . esc_html__( 'Date range', 'blt-surecart-extensions' ) . '</label></div><div>';
 		echo '<input type="date" id="blt-sce-start-date" name="start_date" value="' . esc_attr( $month_start ) . '" required /> ';
 		echo '<span aria-hidden="true">&mdash;</span> ';
 		echo '<input type="date" id="blt-sce-end-date" name="end_date" value="' . esc_attr( $today ) . '" required />';
-		echo '<p class="description">' . esc_html__( 'Inclusive, in the site timezone, matched against each order\'s creation date.', 'blt-surecart-extensions' ) . '</p>';
-		echo '</td></tr>';
+		echo '<p class="blt-field-desc">' . esc_html__( 'Inclusive, in the site timezone, matched against each order\'s creation date.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div></div>';
 
 		// Products.
-		echo '<tr><th scope="row"><label for="blt-sce-products">' . esc_html__( 'Products', 'blt-surecart-extensions' ) . '</label></th><td>';
+		echo '<div class="blt-field"><div class="blt-field-label"><label for="blt-sce-products">' . esc_html__( 'Products', 'blt-surecart-extensions' ) . '</label></div><div>';
 
 		if ( empty( $products ) && $this->products->is_cold() ) {
 			echo '<p><em>' . esc_html__( 'The product list has not been cached yet. A background job has been queued to fetch it — reload this page in a moment. Until then, the report will cover all products.', 'blt-surecart-extensions' ) . '</em></p>';
@@ -472,11 +478,11 @@ final class AdminPage {
 			}
 
 			echo '</select>';
-			echo '<p class="description">' . esc_html__( 'Select nothing to include all products, or hold Ctrl/Cmd to select several.', 'blt-surecart-extensions' ) . '</p>';
+			echo '<p class="blt-field-desc">' . esc_html__( 'Select nothing to include all products, or hold Ctrl/Cmd to select several.', 'blt-surecart-extensions' ) . '</p>';
 		}
 
-		echo '<p>';
-		echo '<span class="description">';
+		echo '<p class="blt-field-desc">';
+		echo '<span>';
 
 		if ( $refreshed_at > 0 ) {
 			printf(
@@ -490,25 +496,29 @@ final class AdminPage {
 
 		echo ' </span>';
 		echo '</p>';
-		echo '</td></tr>';
+		echo '</div></div>';
 
 		// Order status.
-		echo '<tr><th scope="row">' . esc_html__( 'Order status', 'blt-surecart-extensions' ) . '</th><td><fieldset>';
+		echo '<div class="blt-field"><div class="blt-field-label">' . esc_html__( 'Order status', 'blt-surecart-extensions' ) . '</div><div>';
+		echo '<fieldset><div class="blt-toggle-stack">';
 
 		foreach ( $this->status_choices() as $value => $label ) {
 			printf(
-				'<label style="margin-right:1.5em"><input type="checkbox" name="statuses[]" value="%s" %s /> %s</label>',
+				'<label class="blt-toggle"><input type="checkbox" name="statuses[]" value="%s" %s />'
+					. '<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>'
+					. '<span class="blt-toggle-text"><span class="blt-toggle-label">%s</span></span></label>',
 				esc_attr( $value ),
 				checked( 'paid' === $value, true, false ),
 				esc_html( $label )
 			);
 		}
 
-		echo '<p class="description">' . esc_html__( 'Defaults to paid orders only. Draft and failed-payment orders are never included.', 'blt-surecart-extensions' ) . '</p>';
-		echo '</fieldset></td></tr>';
+		echo '</div>';
+		echo '<p class="blt-field-desc">' . esc_html__( 'Defaults to paid orders only. Draft and failed-payment orders are never included.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</fieldset></div></div>';
 
 		// Fulfillment status.
-		echo '<tr><th scope="row"><label for="blt-sce-fulfillment">' . esc_html__( 'Fulfillment status', 'blt-surecart-extensions' ) . '</label></th><td>';
+		echo '<div class="blt-field"><div class="blt-field-label"><label for="blt-sce-fulfillment">' . esc_html__( 'Fulfillment status', 'blt-surecart-extensions' ) . '</label></div><div>';
 		echo '<select id="blt-sce-fulfillment" name="fulfillment">';
 
 		foreach ( $this->fulfillment_choices() as $key => $choice ) {
@@ -521,23 +531,30 @@ final class AdminPage {
 		}
 
 		echo '</select>';
-		echo '<p class="description">' . esc_html__( 'Use "Outstanding" when the report is driving a bulk-fulfillment run: already-shipped orders drop out, and a partially shipped order counts only the units still owed rather than the whole original quantity.', 'blt-surecart-extensions' ) . '</p>';
-		echo '</td></tr>';
+		echo '<p class="blt-field-desc">' . esc_html__( 'Use "Outstanding" when the report is driving a bulk-fulfillment run: already-shipped orders drop out, and a partially shipped order counts only the units still owed rather than the whole original quantity.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div></div>';
 
 		// Address columns.
-		echo '<tr><th scope="row">' . esc_html__( 'Shipping addresses', 'blt-surecart-extensions' ) . '</th><td>';
-		echo '<label><input type="checkbox" name="include_address" value="1" /> ' . esc_html__( 'Add shipping address columns', 'blt-surecart-extensions' ) . '</label>';
-		echo '<p class="description">' . esc_html__( 'Off by default. Turn it on when the CSV is being handed to a fulfillment house rather than a manufacturer. Rows are then grouped per destination, so a customer who shipped to two addresses gets one row per address instead of a single merged row.', 'blt-surecart-extensions' ) . '</p>';
-		echo '</td></tr>';
+		echo '<div class="blt-field"><div class="blt-field-label">' . esc_html__( 'Shipping addresses', 'blt-surecart-extensions' ) . '</div><div>';
+		echo '<label class="blt-toggle"><input type="checkbox" name="include_address" value="1" />';
+		echo '<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>';
+		echo '<span class="blt-toggle-text"><span class="blt-toggle-label">' . esc_html__( 'Add shipping address columns', 'blt-surecart-extensions' ) . '</span>';
+		echo '<span class="blt-toggle-desc">' . esc_html__( 'Off by default. Turn it on when the CSV is being handed to a fulfillment house rather than a manufacturer. Rows are then grouped per destination, so a customer who shipped to two addresses gets one row per address instead of a single merged row.', 'blt-surecart-extensions' ) . '</span>';
+		echo '</span></label>';
+		echo '</div></div>';
 
-		echo '</tbody></table>';
+		echo '</div>'; // .blt-card-body.
+		echo '</div>'; // .blt-card.
 
-		submit_button( __( 'Generate Report', 'blt-surecart-extensions' ) );
+		echo '<div class="blt-settings-footer">';
+		submit_button( __( 'Generate Report', 'blt-surecart-extensions' ), 'primary blt-save-button', 'submit', false );
+		echo '</div>';
+
 		echo '</form>';
 
 		// Product-list refresh, kept out of the main form so it can't be
 		// submitted by accident.
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:-1em">';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( self::NONCE_CREATE );
 		echo '<input type="hidden" name="action" value="blt_sce_refresh_report_products" />';
 		submit_button( __( 'Refresh product list', 'blt-surecart-extensions' ), 'secondary small', 'submit', false );
@@ -552,10 +569,16 @@ final class AdminPage {
 	private function render_list() {
 		$rows = $this->repository->recent( 25 );
 
-		echo '<h2 style="margin-top:2em">' . esc_html__( 'Generated Reports', 'blt-surecart-extensions' ) . '</h2>';
+		echo '<div class="blt-card blt-stack-top">';
+		echo '<div class="blt-card-header"><h2>' . esc_html__( 'Generated Reports', 'blt-surecart-extensions' ) . '</h2>';
+		echo '<p>' . esc_html__( 'The 25 most recent reports. Each one holds customer data — delete the ones you no longer need.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div>';
 
 		if ( empty( $rows ) ) {
-			echo '<p>' . esc_html__( 'No reports generated yet.', 'blt-surecart-extensions' ) . '</p>';
+			echo '<div class="blt-card-body"><div class="blt-empty">';
+			echo '<span class="blt-empty-title">' . esc_html__( 'No reports generated yet', 'blt-surecart-extensions' ) . '</span>';
+			echo '<span>' . esc_html__( 'Generate one above and it will appear here once the background job finishes.', 'blt-surecart-extensions' ) . '</span>';
+			echo '</div></div></div>';
 
 			return;
 		}
@@ -581,7 +604,7 @@ final class AdminPage {
 				$user = get_userdata( (int) $row['created_by'] );
 
 				if ( $user ) {
-					echo '<br /><span class="description">' . esc_html( $user->display_name ) . '</span>';
+					echo '<br /><span class="blt-text-muted">' . esc_html( $user->display_name ) . '</span>';
 				}
 			}
 
@@ -590,7 +613,7 @@ final class AdminPage {
 			// Range and filters.
 			echo '<td>';
 			echo esc_html( $this->range_label( $params ) );
-			echo '<br /><span class="description">' . esc_html( $this->filters_label( $params ) ) . '</span>';
+			echo '<br /><span class="blt-text-muted">' . esc_html( $this->filters_label( $params ) ) . '</span>';
 			echo '</td>';
 
 			// Status.
@@ -612,7 +635,7 @@ final class AdminPage {
 					(int) $row['column_count'],
 					(int) $row['item_count']
 				);
-				echo '<br /><span class="description">';
+				echo '<br /><span class="blt-text-muted">';
 				printf(
 					/* translators: 1: matched order count, 2: scanned order count */
 					esc_html__( '%1$d of %2$d scanned orders matched', 'blt-surecart-extensions' ),
@@ -622,13 +645,13 @@ final class AdminPage {
 				echo '</span>';
 
 				if ( ! empty( $row['truncated'] ) ) {
-					echo '<br /><span style="color:#b32d2e">' . esc_html__( 'Hit the page ceiling — may be incomplete.', 'blt-surecart-extensions' ) . '</span>';
+					echo '<br /><span class="blt-text-danger">' . esc_html__( 'Hit the page ceiling — may be incomplete.', 'blt-surecart-extensions' ) . '</span>';
 				}
 
 				// A completed-but-empty report carries a diagnostic explaining
 				// which of the several possible reasons applied.
 				if ( ! empty( $row['last_error'] ) ) {
-					echo '<br /><span style="color:#b32d2e">' . esc_html( $row['last_error'] ) . '</span>';
+					echo '<br /><span class="blt-text-danger">' . esc_html( $row['last_error'] ) . '</span>';
 				}
 			} else {
 				echo '&mdash;';
@@ -667,9 +690,12 @@ final class AdminPage {
 
 		echo '</tbody></table>';
 
-		echo '<p class="description" style="max-width:60em;margin-top:1em">';
-		echo esc_html__( 'Reports are stored as files under uploads/blt-sce-reports/ with unguessable filenames, and are only served through this screen after a capability and nonce check. An .htaccess denying direct access is written alongside them, which Apache honors and nginx ignores — on nginx the unguessable filename is what keeps them private. Delete reports you no longer need; they contain customer data.', 'blt-surecart-extensions' );
-		echo '</p>';
+		echo '<div class="blt-card-body"><div class="blt-callout">';
+		echo '<strong>' . esc_html__( 'Where these files live', 'blt-surecart-extensions' ) . '</strong>';
+		echo '<span>' . esc_html__( 'Reports are stored as files under uploads/blt-sce-reports/ with unguessable filenames, and are only served through this screen after a capability and nonce check. An .htaccess denying direct access is written alongside them, which Apache honors and nginx ignores — on nginx the unguessable filename is what keeps them private. Delete reports you no longer need; they contain customer data.', 'blt-surecart-extensions' ) . '</span>';
+		echo '</div></div>';
+
+		echo '</div>'; // .blt-card.
 	}
 
 	/**
@@ -681,22 +707,22 @@ final class AdminPage {
 	private function status_html( array $row ) {
 		switch ( $row['status'] ) {
 			case ReportRepository::STATUS_COMPLETE:
-				return '<span class="dashicons dashicons-yes" style="color:#46b450"></span> ' . esc_html__( 'Complete', 'blt-surecart-extensions' );
+				return '<span class="blt-badge blt-badge-confirmed">' . esc_html__( 'Complete', 'blt-surecart-extensions' ) . '</span>';
 
 			case ReportRepository::STATUS_RUNNING:
-				return '<span class="dashicons dashicons-update" style="color:#2271b1"></span> ' . esc_html__( 'Running', 'blt-surecart-extensions' );
+				return '<span class="blt-badge blt-badge-pending">' . esc_html__( 'Running', 'blt-surecart-extensions' ) . '</span>';
 
 			case ReportRepository::STATUS_FAILED:
-				$html = '<span class="dashicons dashicons-warning" style="color:#dc3232"></span> ' . esc_html__( 'Failed', 'blt-surecart-extensions' );
+				$html = '<span class="blt-badge blt-badge-cancelled">' . esc_html__( 'Failed', 'blt-surecart-extensions' ) . '</span>';
 
 				if ( ! empty( $row['last_error'] ) ) {
-					$html .= '<br /><span class="description">' . esc_html( $row['last_error'] ) . '</span>';
+					$html .= '<br /><span class="blt-text-muted">' . esc_html( $row['last_error'] ) . '</span>';
 				}
 
 				return $html;
 
 			default:
-				return '<span class="dashicons dashicons-clock" style="color:#888"></span> ' . esc_html__( 'Queued', 'blt-surecart-extensions' );
+				return '<span class="blt-badge blt-badge-off">' . esc_html__( 'Queued', 'blt-surecart-extensions' ) . '</span>';
 		}
 	}
 

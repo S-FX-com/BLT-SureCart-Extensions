@@ -269,7 +269,12 @@ final class Module implements ModuleInterface {
 			return;
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'Shipments', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-shipments-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'Shipments', 'blt-surecart-extensions' );
+		echo '</h1></div>';
 
 		if ( isset( $_GET['blt_sce_view'], $_GET['shipment_id'] ) && 'logs' === $_GET['blt_sce_view'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$this->render_log_viewer( (int) $_GET['shipment_id'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -280,9 +285,13 @@ final class Module implements ModuleInterface {
 
 		echo '<form method="get">';
 		printf( '<input type="hidden" name="page" value="%s" />', esc_attr( isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : 'blt-sce-shipments' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-body">';
 		$table->search_box( __( 'Search', 'blt-surecart-extensions' ), 'blt-sce-shipments-search' );
 		$table->views();
+		echo '</div>';
 		$table->display();
+		echo '</div>';
 		echo '</form></div>';
 	}
 
@@ -301,11 +310,15 @@ final class Module implements ModuleInterface {
 
 		$logs = $this->logger->for_shipment( $shipment_id );
 
+		echo '<div class="blt-card"><div class="blt-card-header"><h2>';
 		/* translators: %s: SureCart order id */
-		echo '<h2>' . esc_html( sprintf( __( 'Log — order %s', 'blt-surecart-extensions' ), $row->surecart_order_id ) ) . '</h2>';
+		echo esc_html( sprintf( __( 'Log — order %s', 'blt-surecart-extensions' ), $row->surecart_order_id ) );
+		echo '</h2></div>';
 
 		if ( empty( $logs ) ) {
-			echo '<p>' . esc_html__( 'No log entries.', 'blt-surecart-extensions' ) . '</p>';
+			echo '<div class="blt-card-body"><div class="blt-empty">';
+			echo '<span class="blt-empty-title">' . esc_html__( 'No log entries', 'blt-surecart-extensions' ) . '</span>';
+			echo '</div></div></div>';
 			return;
 		}
 
@@ -318,13 +331,13 @@ final class Module implements ModuleInterface {
 			echo '<td>' . esc_html( $entry->message );
 
 			if ( ! empty( $entry->context ) ) {
-				echo '<br /><code style="white-space:pre-wrap;">' . esc_html( $entry->context ) . '</code>';
+				echo '<br /><code class="blt-code">' . esc_html( $entry->context ) . '</code>';
 			}
 
 			echo '</td></tr>';
 		}
 
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
 	}
 
 	/**

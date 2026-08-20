@@ -1,8 +1,13 @@
 /**
- * SureCart - Restrict Price by User Role
- * Admin settings page styles.
+ * BLT SureCart Extensions - Restrict Price by User Role
+ * Page-specific admin styles for the price-restriction matrix.
  *
- * @package SC_Restrict_Price_By_Role
+ * The page shell, cards, badges and save bar come from the shared BLT
+ * design system (assets/css/blt-design-system.css), which this screen
+ * enqueues as a dependency. Only what the design system does not cover
+ * lives here: the loading state and the dense role/price grid.
+ *
+ * @package BLT\SCE
  */
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
@@ -11,12 +16,8 @@
 	max-width: 1200px;
 }
 
-.scrpbr-wrap h1 {
-	margin-bottom: 5px;
-}
-
-.scrpbr-wrap > .description {
-	margin-bottom: 20px;
+.scrpbr-wrap > .blt-field-desc {
+	margin: 0 0 20px;
 	font-size: 14px;
 }
 
@@ -35,34 +36,14 @@
 }
 
 .scrpbr-error {
-	color: #d63638;
+	color: var(--blt-danger-fg, #8a2424);
 	font-weight: 600;
 }
 
-/* ── Product cards ───────────────────────────────────────────────────────── */
-
-.scrpbr-product-card {
-	background: #fff;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	margin-bottom: 20px;
-	overflow: hidden;
-}
-
-.scrpbr-product-name {
-	margin: 0;
-	padding: 12px 16px;
-	background: #f6f7f7;
-	border-bottom: 1px solid #c3c4c7;
-	font-size: 14px;
-}
-
-/* ── Price table ─────────────────────────────────────────────────────────── */
-
-.scrpbr-price-table {
-	border: none;
-	border-radius: 0;
-}
+/* ── Price table ─────────────────────────────────────────────────────────────
+   The product card itself is a .blt-card and its title bar a
+   .blt-card-header, so the chrome that used to live here is gone. What
+   remains is the dense grid the design system has no component for. --- */
 
 .scrpbr-price-table thead th {
 	font-size: 12px;
@@ -90,18 +71,8 @@
 }
 
 .scrpbr-price-amount {
-	color: #50575e;
+	color: var(--blt-muted-fg, #646970);
 	font-size: 13px;
-}
-
-.scrpbr-recurring-badge {
-	display: inline-block;
-	background: #dff0d8;
-	color: #3c763d;
-	font-size: 11px;
-	padding: 1px 6px;
-	border-radius: 3px;
-	margin-left: 4px;
 }
 
 .scrpbr-price-table input[type="checkbox"] {

@@ -164,7 +164,8 @@ final class OffersListTable extends \WP_List_Table {
 	 * @return string
 	 */
 	protected function column_status( $item ) {
-		$out = esc_html( OfferPostType::status_label( $item->status ) );
+		$out = '<span class="blt-badge ' . esc_attr( OfferPostType::status_badge_class( $item->status ) ) . '">'
+			. esc_html( OfferPostType::status_label( $item->status ) ) . '</span>';
 
 		if ( OfferPostType::STATUS_COUNTERED === $item->status && $item->counter_amount ) {
 			$out .= '<br /><span class="description">' . esc_html(
@@ -181,7 +182,7 @@ final class OffersListTable extends \WP_List_Table {
 		}
 
 		if ( '' !== $item->capture_error && in_array( $item->status, array( OfferPostType::STATUS_PENDING, OfferPostType::STATUS_COUNTERED ), true ) ) {
-			$out .= '<br /><span style="color:#d63638;">' . esc_html__( 'Charge failed — see detail', 'blt-surecart-extensions' ) . '</span>';
+			$out .= '<br /><span class="blt-text-danger">' . esc_html__( 'Charge failed — see detail', 'blt-surecart-extensions' ) . '</span>';
 		}
 
 		return $out;

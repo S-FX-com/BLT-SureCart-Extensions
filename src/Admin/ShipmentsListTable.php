@@ -177,21 +177,28 @@ final class ShipmentsListTable extends \WP_List_Table {
 	 * @return string
 	 */
 	protected function column_status( $item ) {
-		$colors = array(
-			ShipmentRepository::STATUS_PENDING    => '#999',
-			ShipmentRepository::STATUS_QUOTED     => '#996800',
-			ShipmentRepository::STATUS_REVIEW     => '#b32d2e',
-			ShipmentRepository::STATUS_PURCHASED  => '#2271b1',
-			ShipmentRepository::STATUS_SHIPPED    => '#2271b1',
-			ShipmentRepository::STATUS_IN_TRANSIT => '#2271b1',
-			ShipmentRepository::STATUS_DELIVERED  => '#00a32a',
-			ShipmentRepository::STATUS_EXCEPTION  => '#d63638',
-			ShipmentRepository::STATUS_VOIDED     => '#666',
-			ShipmentRepository::STATUS_FAILED     => '#d63638',
+		// Design-system badges, not inline hexes (DESIGN.md §2). The badge
+		// classes are deliberately unscoped precisely so they work inside a
+		// native WP_List_Table like this one.
+		$classes = array(
+			ShipmentRepository::STATUS_PENDING    => 'blt-badge-off',
+			ShipmentRepository::STATUS_QUOTED     => 'blt-badge-pending',
+			ShipmentRepository::STATUS_REVIEW     => 'blt-badge-cancelled',
+			ShipmentRepository::STATUS_PURCHASED  => 'blt-badge-type-online',
+			ShipmentRepository::STATUS_SHIPPED    => 'blt-badge-type-online',
+			ShipmentRepository::STATUS_IN_TRANSIT => 'blt-badge-type-online',
+			ShipmentRepository::STATUS_DELIVERED  => 'blt-badge-confirmed',
+			ShipmentRepository::STATUS_EXCEPTION  => 'blt-badge-cancelled',
+			ShipmentRepository::STATUS_VOIDED     => 'blt-badge-refunded',
+			ShipmentRepository::STATUS_FAILED     => 'blt-badge-cancelled',
 		);
-		$color  = isset( $colors[ $item->status ] ) ? $colors[ $item->status ] : '#666';
+		$class   = isset( $classes[ $item->status ] ) ? $classes[ $item->status ] : 'blt-badge-off';
 
-		return sprintf( '<span style="color:%s;font-weight:600;">%s</span>', esc_attr( $color ), esc_html( ucwords( str_replace( '_', ' ', $item->status ) ) ) );
+		return sprintf(
+			'<span class="blt-badge %s">%s</span>',
+			esc_attr( $class ),
+			esc_html( ucwords( str_replace( '_', ' ', $item->status ) ) )
+		);
 	}
 
 	/**

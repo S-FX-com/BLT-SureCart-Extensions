@@ -162,7 +162,13 @@ final class AdminPage {
 			return;
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'Offers', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-offers-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'Make an Offer', 'blt-surecart-extensions' );
+		echo ' <span class="blt-admin-page-header-sub">' . esc_html__( 'Offers', 'blt-surecart-extensions' ) . '</span>';
+		echo '</h1></div>';
 
 		if ( isset( $_GET['blt_sce_notice'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$this->render_notice( sanitize_key( wp_unslash( $_GET['blt_sce_notice'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -179,8 +185,13 @@ final class AdminPage {
 
 		$table = new OffersListTable( $this->repository );
 		$table->prepare_items();
+
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-body">';
 		$table->views();
+		echo '</div>';
 		$table->display();
+		echo '</div>';
 
 		echo '</div>';
 	}
@@ -251,9 +262,6 @@ final class AdminPage {
 			esc_html__( 'Back to all offers', 'blt-surecart-extensions' )
 		);
 
-		/* translators: %d: offer ID */
-		echo '<h2>' . esc_html( sprintf( __( 'Offer #%d', 'blt-surecart-extensions' ), $offer->id ) ) . '</h2>';
-
 		if ( '' !== $offer->capture_error ) {
 			echo '<div class="notice notice-error"><p>' . esc_html(
 				sprintf(
@@ -279,13 +287,20 @@ final class AdminPage {
 			__( 'SureCart order', 'blt-surecart-extensions' ) => $offer->sc_order_id ? $offer->sc_order_id : '—',
 		);
 
-		echo '<table class="widefat striped" style="max-width:720px;"><tbody>';
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-header"><h2>';
+		/* translators: %d: offer ID */
+		echo esc_html( sprintf( __( 'Offer #%d', 'blt-surecart-extensions' ), $offer->id ) );
+		echo '</h2>';
+		echo '<div class="blt-card-header-badges"><span class="blt-badge ' . esc_attr( OfferPostType::status_badge_class( $offer->status ) ) . '">' . esc_html( OfferPostType::status_label( $offer->status ) ) . '</span></div>';
+		echo '</div>';
+		echo '<div class="blt-card-body">';
 
 		foreach ( $rows as $label => $value ) {
-			echo '<tr><th style="width:200px;">' . esc_html( $label ) . '</th><td>' . esc_html( $value ) . '</td></tr>';
+			echo '<div class="blt-field"><div class="blt-field-label">' . esc_html( $label ) . '</div><div>' . esc_html( $value ) . '</div></div>';
 		}
 
-		echo '</tbody></table>';
+		echo '</div></div>';
 
 		// Accepted but the SureCart order back-fill failed (or hasn't run):
 		// surface the error and a retry action.
@@ -313,7 +328,9 @@ final class AdminPage {
 			return;
 		}
 
-		echo '<h3>' . esc_html__( 'Actions', 'blt-surecart-extensions' ) . '</h3>';
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-header"><h2>' . esc_html__( 'Actions', 'blt-surecart-extensions' ) . '</h2></div>';
+		echo '<div class="blt-card-body">';
 
 		printf(
 			'<p><a href="%s" class="button button-primary">%s</a> <a href="%s" class="button" onclick="return confirm(%s);">%s</a></p>',
@@ -326,7 +343,7 @@ final class AdminPage {
 
 		if ( Settings::get( 'allow_counter' ) && OfferPostType::STATUS_PENDING === $offer->status ) {
 			?>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:12px;">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="blt-stack-top">
 				<?php wp_nonce_field( self::ACTION_OFFER . '_counter_' . $offer->id ); ?>
 				<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION_OFFER ); ?>" />
 				<input type="hidden" name="offer_id" value="<?php echo esc_attr( $offer->id ); ?>" />
@@ -339,6 +356,8 @@ final class AdminPage {
 			</form>
 			<?php
 		}
+
+		echo '</div></div>';
 	}
 
 	/**
@@ -419,7 +438,13 @@ final class AdminPage {
 		$settings   = Settings::all();
 		$key_locked = Settings::secret_key_is_constant_defined();
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'Make an Offer Settings', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-offer-settings-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'Make an Offer', 'blt-surecart-extensions' );
+		echo ' <span class="blt-admin-page-header-sub">' . esc_html__( 'Settings', 'blt-surecart-extensions' ) . '</span>';
+		echo '</h1></div>';
 
 		if ( $notice ) {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $notice ) . '</p></div>';
@@ -433,126 +458,173 @@ final class AdminPage {
 			<?php wp_nonce_field( self::NONCE_SETTINGS ); ?>
 			<input type="hidden" name="blt_sce_offer_settings" value="1" />
 
-			<h2><?php esc_html_e( 'Offer rules', 'blt-surecart-extensions' ); ?></h2>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="expiry_days"><?php esc_html_e( 'Offer expiry (days)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="1" step="1" name="expiry_days" id="expiry_days" value="<?php echo esc_attr( $settings['expiry_days'] ); ?>" class="small-text" />
-						<p class="description"><?php esc_html_e( 'Days before a pending offer auto-expires.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="min_pct"><?php esc_html_e( 'Minimum offer (% of list price)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="0" max="100" step="1" name="min_pct" id="min_pct" value="<?php echo esc_attr( $settings['min_pct'] ); ?>" class="small-text" />
-						<p class="description"><?php esc_html_e( 'Offers below this percentage are rejected at submission. 0 disables the check.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="auto_accept_pct"><?php esc_html_e( 'Auto-accept threshold (% of list price)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="0" max="100" step="1" name="auto_accept_pct" id="auto_accept_pct" value="<?php echo esc_attr( $settings['auto_accept_pct'] ); ?>" class="small-text" />
-						<p class="description"><?php esc_html_e( 'Offers at or above this percentage are accepted and charged automatically, with no merchant review. 0 (recommended default) disables auto-accept.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Counter-offers', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<label>
-							<input type="checkbox" name="allow_counter" value="1" <?php checked( ! empty( $settings['allow_counter'] ) ); ?> />
-							<?php esc_html_e( 'Allow sending counter-offers.', 'blt-surecart-extensions' ); ?>
-						</label>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Repeat offers', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<select name="resubmit_policy">
-							<option value="reject" <?php selected( $settings['resubmit_policy'], 'reject' ); ?>><?php esc_html_e( 'Reject — one open offer per customer per product', 'blt-surecart-extensions' ); ?></option>
-							<option value="supersede" <?php selected( $settings['resubmit_policy'], 'supersede' ); ?>><?php esc_html_e( 'Supersede — a new offer replaces the open one', 'blt-surecart-extensions' ); ?></option>
-						</select>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="notify_email"><?php esc_html_e( 'Merchant notification email', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="email" name="notify_email" id="notify_email" value="<?php echo esc_attr( $settings['notify_email'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_bloginfo( 'admin_email' ) ); ?>" />
-						<p class="description"><?php esc_html_e( 'Leave blank to use the site admin email.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Offer rules', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'What customers may offer, and how long they have.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="expiry_days"><?php esc_html_e( 'Offer expiry (days)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="1" step="1" name="expiry_days" id="expiry_days" value="<?php echo esc_attr( $settings['expiry_days'] ); ?>" class="small-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Days before a pending offer auto-expires.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="min_pct"><?php esc_html_e( 'Minimum offer (% of list price)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="0" max="100" step="1" name="min_pct" id="min_pct" value="<?php echo esc_attr( $settings['min_pct'] ); ?>" class="small-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Offers below this percentage are rejected at submission. 0 disables the check.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="auto_accept_pct"><?php esc_html_e( 'Auto-accept threshold (% of list price)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="0" max="100" step="1" name="auto_accept_pct" id="auto_accept_pct" value="<?php echo esc_attr( $settings['auto_accept_pct'] ); ?>" class="small-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Offers at or above this percentage are accepted and charged automatically, with no merchant review. 0 (recommended default) disables auto-accept.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><?php esc_html_e( 'Counter-offers', 'blt-surecart-extensions' ); ?></div>
+						<div>
+							<label class="blt-toggle">
+								<input type="checkbox" name="allow_counter" value="1" <?php checked( ! empty( $settings['allow_counter'] ) ); ?> />
+								<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+								<span class="blt-toggle-text">
+									<span class="blt-toggle-label"><?php esc_html_e( 'Allow sending counter-offers', 'blt-surecart-extensions' ); ?></span>
+								</span>
+							</label>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_resubmit_policy"><?php esc_html_e( 'Repeat offers', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<select name="resubmit_policy" id="blt_sce_resubmit_policy">
+								<option value="reject" <?php selected( $settings['resubmit_policy'], 'reject' ); ?>><?php esc_html_e( 'Reject — one open offer per customer per product', 'blt-surecart-extensions' ); ?></option>
+								<option value="supersede" <?php selected( $settings['resubmit_policy'], 'supersede' ); ?>><?php esc_html_e( 'Supersede — a new offer replaces the open one', 'blt-surecart-extensions' ); ?></option>
+							</select>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="notify_email"><?php esc_html_e( 'Merchant notification email', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="email" name="notify_email" id="notify_email" value="<?php echo esc_attr( $settings['notify_email'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_bloginfo( 'admin_email' ) ); ?>" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Leave blank to use the site admin email.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<h2><?php esc_html_e( 'Stripe', 'blt-surecart-extensions' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'Offers vault the customer\'s card with Stripe and charge it on acceptance. Charges are made directly through this Stripe account; with order recording enabled below, each accepted offer is then recorded as a manually-paid SureCart order.', 'blt-surecart-extensions' ); ?>
-			</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="stripe_secret_key"><?php esc_html_e( 'Secret key', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<?php if ( $key_locked ) : ?>
-							<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
-							<p class="description"><?php esc_html_e( 'Defined via the BLT_SCE_STRIPE_SECRET_KEY constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php else : ?>
-							<input type="password" autocomplete="new-password" name="stripe_secret_key" id="stripe_secret_key" class="regular-text" value="" placeholder="<?php echo '' === $settings['stripe_secret_key'] ? esc_attr__( 'sk_test_… / sk_live_…', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
-							<p class="description"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_STRIPE_SECRET_KEY in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php endif; ?>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="stripe_publishable_key"><?php esc_html_e( 'Publishable key', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="text" name="stripe_publishable_key" id="stripe_publishable_key" class="regular-text" value="<?php echo esc_attr( $settings['stripe_publishable_key'] ); ?>" placeholder="pk_test_… / pk_live_…" />
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="stripe_account_id"><?php esc_html_e( 'Connected account ID (optional)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="text" name="stripe_account_id" id="stripe_account_id" class="regular-text" value="<?php echo esc_attr( $settings['stripe_account_id'] ); ?>" placeholder="acct_…" />
-						<p class="description"><?php esc_html_e( 'Only needed when the keys above belong to a platform account and charges should run on a connected account (e.g. SureCart\'s connected Stripe account).', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Stripe', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Offers vault the customer\'s card with Stripe and charge it on acceptance. Charges are made directly through this Stripe account; with order recording enabled below, each accepted offer is then recorded as a manually-paid SureCart order.', 'blt-surecart-extensions' ); ?></p>
+					<div class="blt-card-header-badges">
+						<span class="blt-badge <?php echo '' === Settings::stripe_secret_key() ? 'blt-badge-off' : 'blt-badge-on'; ?>">
+							<?php echo '' === Settings::stripe_secret_key() ? esc_html__( 'Not connected', 'blt-surecart-extensions' ) : esc_html__( 'Connected', 'blt-surecart-extensions' ); ?>
+						</span>
+					</div>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="stripe_secret_key"><?php esc_html_e( 'Secret key', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<?php if ( $key_locked ) : ?>
+								<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
+								<p class="blt-field-desc"><?php esc_html_e( 'Defined via the BLT_SCE_STRIPE_SECRET_KEY constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
+							<?php else : ?>
+								<input type="password" autocomplete="new-password" name="stripe_secret_key" id="stripe_secret_key" class="regular-text" value="" placeholder="<?php echo '' === $settings['stripe_secret_key'] ? esc_attr__( 'sk_test_… / sk_live_…', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
+								<p class="blt-field-desc"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_STRIPE_SECRET_KEY in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+								<?php if ( '' !== $settings['stripe_secret_key'] ) : ?>
+									<p class="blt-field-desc">
+										<label>
+											<input type="checkbox" name="stripe_secret_key_clear" value="1" />
+											<?php esc_html_e( 'Clear the saved key', 'blt-surecart-extensions' ); ?>
+										</label>
+										<br />
+										<?php esc_html_e( 'Only needed to hand this over to a shared BLT credential: this module\'s own key always wins, so the shared one applies only once nothing is stored here.', 'blt-surecart-extensions' ); ?>
+									</p>
+								<?php endif; ?>
+							<?php endif; ?>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="stripe_publishable_key"><?php esc_html_e( 'Publishable key', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="text" name="stripe_publishable_key" id="stripe_publishable_key" class="regular-text" value="<?php echo esc_attr( $settings['stripe_publishable_key'] ); ?>" placeholder="pk_test_… / pk_live_…" />
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="stripe_account_id"><?php esc_html_e( 'Connected account ID (optional)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="text" name="stripe_account_id" id="stripe_account_id" class="regular-text" value="<?php echo esc_attr( $settings['stripe_account_id'] ); ?>" placeholder="acct_…" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Only needed when the keys above belong to a platform account and charges should run on a connected account (e.g. SureCart\'s connected Stripe account).', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<h2><?php esc_html_e( 'SureCart order recording', 'blt-surecart-extensions' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'When enabled, every accepted offer is recorded in SureCart as a real order (created via a manually-paid checkout at the accepted amount), so orders, purchases, customer records, and fulfillment all see it. The Stripe charge above remains the actual payment; the SureCart order is marked as manually paid.', 'blt-surecart-extensions' ); ?>
-			</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Record orders', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<label>
-							<input type="checkbox" name="record_sc_order" value="1" <?php checked( ! empty( $settings['record_sc_order'] ) ); ?> />
-							<?php esc_html_e( 'Create a SureCart order for each accepted offer.', 'blt-surecart-extensions' ); ?>
-						</label>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="surecart_api_token"><?php esc_html_e( 'SureCart API token', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<?php if ( Settings::sc_token_is_constant_defined() ) : ?>
-							<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
-							<p class="description"><?php esc_html_e( 'Defined via the BLT_SCE_SURECART_API_TOKEN constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php else : ?>
-							<input type="password" autocomplete="new-password" name="surecart_api_token" id="surecart_api_token" class="regular-text" value="" placeholder="<?php echo '' === $settings['surecart_api_token'] ? esc_attr__( 'Created in the SureCart dashboard under API Tokens', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
-							<p class="description"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_SURECART_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php endif; ?>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'SureCart order recording', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'When enabled, every accepted offer is recorded in SureCart as a real order (created via a manually-paid checkout at the accepted amount), so orders, purchases, customer records, and fulfillment all see it. The Stripe charge above remains the actual payment; the SureCart order is marked as manually paid.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><?php esc_html_e( 'Record orders', 'blt-surecart-extensions' ); ?></div>
+						<div>
+							<label class="blt-toggle">
+								<input type="checkbox" name="record_sc_order" value="1" <?php checked( ! empty( $settings['record_sc_order'] ) ); ?> />
+								<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+								<span class="blt-toggle-text">
+									<span class="blt-toggle-label"><?php esc_html_e( 'Create a SureCart order for each accepted offer', 'blt-surecart-extensions' ); ?></span>
+								</span>
+							</label>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="surecart_api_token"><?php esc_html_e( 'SureCart API token', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<?php if ( Settings::sc_token_is_constant_defined() ) : ?>
+								<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
+								<p class="blt-field-desc"><?php esc_html_e( 'Defined via the BLT_SCE_SURECART_API_TOKEN constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
+							<?php else : ?>
+								<input type="password" autocomplete="new-password" name="surecart_api_token" id="surecart_api_token" class="regular-text" value="" placeholder="<?php echo '' === $settings['surecart_api_token'] ? esc_attr__( 'Created in the SureCart dashboard under API Tokens', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
+								<p class="blt-field-desc"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_SURECART_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+								<?php if ( '' !== $settings['surecart_api_token'] ) : ?>
+									<p class="blt-field-desc">
+										<label>
+											<input type="checkbox" name="surecart_api_token_clear" value="1" />
+											<?php esc_html_e( 'Clear the saved token', 'blt-surecart-extensions' ); ?>
+										</label>
+										<br />
+										<?php esc_html_e( 'Only needed to hand this over to a shared BLT credential: this module\'s own token always wins, so the shared one applies only once nothing is stored here.', 'blt-surecart-extensions' ); ?>
+									</p>
+								<?php endif; ?>
+							<?php endif; ?>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<?php submit_button(); ?>
+			<div class="blt-settings-footer">
+				<?php submit_button( null, 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 			<?php wp_nonce_field( self::ACTION_DETECT ); ?>
 			<input type="hidden" name="action" value="<?php echo esc_attr( self::ACTION_DETECT ); ?>" />
-			<p>
-				<?php submit_button( __( 'Detect publishable key / account from SureCart', 'blt-surecart-extensions' ), 'secondary', 'submit', false ); ?>
-			</p>
-			<p class="description"><?php esc_html_e( 'Attempts to read the Stripe publishable key and connected account ID from the SureCart store configuration. The secret key can never be auto-detected — it comes from your own Stripe dashboard.', 'blt-surecart-extensions' ); ?></p>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Detect from SureCart', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Attempts to read the Stripe publishable key and connected account ID from the SureCart store configuration. The secret key can never be auto-detected — it comes from your own Stripe dashboard.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<?php submit_button( __( 'Detect publishable key / account from SureCart', 'blt-surecart-extensions' ), 'secondary', 'submit', false ); ?>
+				</div>
+			</div>
 		</form>
 		</div>
 		<?php
@@ -576,13 +648,29 @@ final class AdminPage {
 			'record_sc_order'        => ! empty( $_POST['record_sc_order'] ),
 		);
 
-		// Like the Shippo token: blank means "keep the current secret."
-		if ( ! Settings::secret_key_is_constant_defined() && ! empty( $_POST['stripe_secret_key'] ) ) {
-			$values['stripe_secret_key'] = sanitize_text_field( wp_unslash( $_POST['stripe_secret_key'] ) );
+		/*
+		 * Like the Shippo token: blank means "keep the current secret", so the
+		 * value never has to be rendered back into the page. The companion
+		 * _clear checkbox is the only way to empty one — needed to hand a
+		 * credential over to the shared BLT store, since this module's own
+		 * value always wins and the shared one applies only once nothing is
+		 * stored here. A wp-config constant outranks both, so neither branch
+		 * runs while one is defined.
+		 */
+		if ( ! Settings::secret_key_is_constant_defined() ) {
+			if ( ! empty( $_POST['stripe_secret_key'] ) ) {
+				$values['stripe_secret_key'] = sanitize_text_field( wp_unslash( $_POST['stripe_secret_key'] ) );
+			} elseif ( ! empty( $_POST['stripe_secret_key_clear'] ) ) {
+				$values['stripe_secret_key'] = '';
+			}
 		}
 
-		if ( ! Settings::sc_token_is_constant_defined() && ! empty( $_POST['surecart_api_token'] ) ) {
-			$values['surecart_api_token'] = sanitize_text_field( wp_unslash( $_POST['surecart_api_token'] ) );
+		if ( ! Settings::sc_token_is_constant_defined() ) {
+			if ( ! empty( $_POST['surecart_api_token'] ) ) {
+				$values['surecart_api_token'] = sanitize_text_field( wp_unslash( $_POST['surecart_api_token'] ) );
+			} elseif ( ! empty( $_POST['surecart_api_token_clear'] ) ) {
+				$values['surecart_api_token'] = '';
+			}
 		}
 
 		Settings::save( $values );

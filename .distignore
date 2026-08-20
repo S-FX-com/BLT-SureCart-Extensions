@@ -22,5 +22,10 @@ package.json
 package-lock.json
 phpcs.xml
 phpcs.xml.dist
+# Dev-only companions to includes/blt-family/ — the library itself MUST
+# ship. Root-anchored so nothing of the same name deeper in the tree is
+# accidentally dropped from the zip.
+/blt-family-smoke.php
+/DESIGN.md
 *.zip
 .DS_Store

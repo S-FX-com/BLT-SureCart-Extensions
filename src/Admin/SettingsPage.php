@@ -142,15 +142,21 @@ final class SettingsPage {
 			? sanitize_key( wp_unslash( $_GET['tab'] ) ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			: 'general';
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'Shippo Fulfillment Settings', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-settings-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'Shippo Fulfillment', 'blt-surecart-extensions' );
+		echo ' <span class="blt-admin-page-header-sub">' . esc_html__( 'Settings', 'blt-surecart-extensions' ) . '</span>';
+		echo '</h1></div>';
 
 		if ( $notice ) {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $notice ) . '</p></div>';
 		}
 
-		echo '<h2 class="nav-tab-wrapper">';
+		echo '<nav class="blt-settings-tabs">';
 		foreach ( $tabs as $slug => $label ) {
-			$class = $slug === $active ? 'nav-tab nav-tab-active' : 'nav-tab';
+			$class = $slug === $active ? 'blt-settings-tab is-active' : 'blt-settings-tab';
 			printf(
 				'<a class="%s" href="%s">%s</a>',
 				esc_attr( $class ),
@@ -166,7 +172,7 @@ final class SettingsPage {
 				esc_html( $label )
 			);
 		}
-		echo '</h2>';
+		echo '</nav>';
 
 		switch ( $active ) {
 			case 'parcels':
@@ -232,59 +238,90 @@ final class SettingsPage {
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="general" />
 
-			<h2><?php esc_html_e( 'Kill switch', 'blt-surecart-extensions' ); ?></h2>
-			<p>
-				<label>
-					<input type="checkbox" name="kill_switch" value="1" <?php checked( $kill_switch ); ?> />
-					<?php esc_html_e( 'Halt all Shippo purchasing immediately (existing shipment records are untouched).', 'blt-surecart-extensions' ); ?>
-				</label>
-			</p>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Kill switch', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'An absolute stop, checked before anything else in every path that could buy a label.', 'blt-surecart-extensions' ); ?></p>
+					<div class="blt-card-header-badges">
+						<span class="blt-badge <?php echo $kill_switch ? 'blt-badge-cancelled' : 'blt-badge-on'; ?>">
+							<?php echo $kill_switch ? esc_html__( 'Halted', 'blt-surecart-extensions' ) : esc_html__( 'Running', 'blt-surecart-extensions' ); ?>
+						</span>
+					</div>
+				</div>
+				<div class="blt-card-body">
+					<label class="blt-toggle">
+						<input type="checkbox" name="kill_switch" value="1" <?php checked( $kill_switch ); ?> />
+						<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+						<span class="blt-toggle-text">
+							<span class="blt-toggle-label"><?php esc_html_e( 'Halt all Shippo purchasing', 'blt-surecart-extensions' ); ?></span>
+							<span class="blt-toggle-desc"><?php esc_html_e( 'Takes effect immediately. Existing shipment records are untouched.', 'blt-surecart-extensions' ); ?></span>
+						</span>
+					</label>
+				</div>
+			</div>
 
-			<h2><?php esc_html_e( 'Mode', 'blt-surecart-extensions' ); ?></h2>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="blt_sce_mode"><?php esc_html_e( 'Shippo mode', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<select name="mode" id="blt_sce_mode">
-							<option value="test" <?php selected( $mode, Guardrails::MODE_TEST ); ?>><?php esc_html_e( 'Test', 'blt-surecart-extensions' ); ?></option>
-							<option value="live" <?php selected( $mode, Guardrails::MODE_LIVE ); ?>><?php esc_html_e( 'Live', 'blt-surecart-extensions' ); ?></option>
-						</select>
-						<p class="description"><?php esc_html_e( 'The configured token must match this mode (shippo_test_… or shippo_live_…) or purchases are refused.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="blt_sce_token"><?php esc_html_e( 'Shippo API token', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<?php if ( $token_locked ) : ?>
-							<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
-							<p class="description"><?php esc_html_e( 'Defined via the BLT_SCE_SHIPPO_API_TOKEN constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php else : ?>
-							<input type="password" autocomplete="new-password" name="shippo_token" id="blt_sce_token" class="regular-text" value="" placeholder="<?php echo '' === $token ? esc_attr__( 'shippo_test_… / shippo_live_…', 'blt-surecart-extensions' ) : esc_attr( sprintf( /* translators: %s: masked token */ __( 'Currently set (%s) — leave blank to keep it', 'blt-surecart-extensions' ), str_repeat( '•', 8 ) . substr( $token, -4 ) ) ); ?>" />
-							<p class="description"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. Leave blank to keep the current token — the field is never pre-filled with the real value. For production, prefer defining BLT_SCE_SHIPPO_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
-						<?php endif; ?>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="blt_sce_auto_purchase"><?php esc_html_e( 'Auto-purchase', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<label>
-							<input type="checkbox" name="auto_purchase" id="blt_sce_auto_purchase" value="1" <?php checked( $auto_purchase ); ?> />
-							<?php esc_html_e( 'Automatically purchase labels once a rate clears all guardrails.', 'blt-surecart-extensions' ); ?>
-						</label>
-						<p class="description"><?php esc_html_e( 'Off by default. While off, every order is quoted and placed in the Review Queue for a one-click purchase.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="blt_sce_reconcile_hours"><?php esc_html_e( 'Reconciliation threshold (hours)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="1" step="1" name="reconcile_hours" id="blt_sce_reconcile_hours" value="<?php echo esc_attr( $reconcile_hrs ); ?>" class="small-text" />
-						<p class="description"><?php esc_html_e( 'Shipments stuck in a non-terminal status longer than this are re-checked against Shippo directly, in case a tracking webhook was missed.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Mode &amp; credentials', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Which Shippo environment this site talks to, and how labels get bought.', 'blt-surecart-extensions' ); ?></p>
+					<div class="blt-card-header-badges">
+						<span class="blt-badge <?php echo '' === $token ? 'blt-badge-off' : 'blt-badge-on'; ?>">
+							<?php echo '' === $token ? esc_html__( 'No token', 'blt-surecart-extensions' ) : esc_html__( 'Token set', 'blt-surecart-extensions' ); ?>
+						</span>
+					</div>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_mode"><?php esc_html_e( 'Shippo mode', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<select name="mode" id="blt_sce_mode">
+								<option value="test" <?php selected( $mode, Guardrails::MODE_TEST ); ?>><?php esc_html_e( 'Test', 'blt-surecart-extensions' ); ?></option>
+								<option value="live" <?php selected( $mode, Guardrails::MODE_LIVE ); ?>><?php esc_html_e( 'Live', 'blt-surecart-extensions' ); ?></option>
+							</select>
+							<p class="blt-field-desc"><?php esc_html_e( 'The configured token must match this mode (shippo_test_… or shippo_live_…) or purchases are refused.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_token"><?php esc_html_e( 'Shippo API token', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<?php if ( $token_locked ) : ?>
+								<input type="text" class="regular-text" value="<?php echo esc_attr( str_repeat( '•', 8 ) ); ?>" disabled />
+								<p class="blt-field-desc"><?php esc_html_e( 'Defined via the BLT_SCE_SHIPPO_API_TOKEN constant in wp-config.php — remove the constant to manage it here instead.', 'blt-surecart-extensions' ); ?></p>
+							<?php else : ?>
+								<input type="password" autocomplete="new-password" name="shippo_token" id="blt_sce_token" class="regular-text" value="" placeholder="<?php echo '' === $token ? esc_attr__( 'shippo_test_… / shippo_live_…', 'blt-surecart-extensions' ) : esc_attr( sprintf( /* translators: %s: masked token */ __( 'Currently set (%s) — leave blank to keep it', 'blt-surecart-extensions' ), str_repeat( '•', 8 ) . substr( $token, -4 ) ) ); ?>" />
+								<p class="blt-field-desc"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. Leave blank to keep the current token — the field is never pre-filled with the real value. For production, prefer defining BLT_SCE_SHIPPO_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+							<?php endif; ?>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_auto_purchase"><?php esc_html_e( 'Auto-purchase', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<label class="blt-toggle">
+								<input type="checkbox" name="auto_purchase" id="blt_sce_auto_purchase" value="1" <?php checked( $auto_purchase ); ?> />
+								<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+								<span class="blt-toggle-text">
+									<span class="blt-toggle-label"><?php esc_html_e( 'Purchase labels automatically', 'blt-surecart-extensions' ); ?></span>
+									<span class="blt-toggle-desc"><?php esc_html_e( 'Off by default. While off, every order is quoted and placed in the Review Queue for a one-click purchase.', 'blt-surecart-extensions' ); ?></span>
+								</span>
+							</label>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_reconcile_hours"><?php esc_html_e( 'Reconciliation threshold (hours)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="1" step="1" name="reconcile_hours" id="blt_sce_reconcile_hours" value="<?php echo esc_attr( $reconcile_hrs ); ?>" class="small-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Shipments stuck in a non-terminal status longer than this are re-checked against Shippo directly, in case a tracking webhook was missed.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<h2><?php esc_html_e( 'Ship-from address', 'blt-surecart-extensions' ); ?></h2>
-			<table class="form-table" role="presentation">
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Ship-from address', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'The origin address every label is bought against.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
 				<?php
 				foreach ( array(
 					'name'    => __( 'Name', 'blt-surecart-extensions' ),
@@ -299,42 +336,50 @@ final class SettingsPage {
 					'email'   => __( 'Email', 'blt-surecart-extensions' ),
 				) as $field => $field_label ) :
 					?>
-					<tr>
-						<th scope="row"><label for="ship_from_<?php echo esc_attr( $field ); ?>"><?php echo esc_html( $field_label ); ?></label></th>
-						<td><input type="text" class="regular-text" name="ship_from[<?php echo esc_attr( $field ); ?>]" id="ship_from_<?php echo esc_attr( $field ); ?>" value="<?php echo esc_attr( $ship_from[ $field ] ); ?>" /></td>
-					</tr>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="ship_from_<?php echo esc_attr( $field ); ?>"><?php echo esc_html( $field_label ); ?></label></div>
+						<div><input type="text" class="regular-text" name="ship_from[<?php echo esc_attr( $field ); ?>]" id="ship_from_<?php echo esc_attr( $field ); ?>" value="<?php echo esc_attr( $ship_from[ $field ] ); ?>" /></div>
+					</div>
 				<?php endforeach; ?>
-			</table>
+				</div>
+			</div>
 
-			<h2><?php esc_html_e( 'Tracking webhook security', 'blt-surecart-extensions' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'Shippo tracking updates are delivered to the URL below (registered automatically). The URL token is the default, self-service security check; the IP allowlist and HMAC secret are optional extra layers — HMAC requires requesting setup from Shippo support first.', 'blt-surecart-extensions' ); ?>
-			</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Webhook URL', 'blt-surecart-extensions' ); ?></th>
-					<td><code><?php echo esc_html( ShippoWebhookController::callback_url() ); ?></code></td>
-				</tr>
-				<tr>
-					<th scope="row"><?php esc_html_e( 'IP allowlist', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<label>
-							<input type="checkbox" name="webhook_ip_allowlist" value="1" <?php checked( (bool) get_option( ShippoWebhookController::OPT_IP_ALLOWLIST_ENABLED, false ) ); ?> />
-							<?php esc_html_e( 'Also require the request to come from a published Shippo IP.', 'blt-surecart-extensions' ); ?>
-						</label>
-						<p class="description"><?php esc_html_e( 'Leave off if this site sits behind a proxy/CDN that obscures the real source IP.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="webhook_hmac_secret"><?php esc_html_e( 'HMAC shared secret', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="password" autocomplete="new-password" name="webhook_hmac_secret" id="webhook_hmac_secret" class="regular-text" value="" placeholder="<?php echo '' === get_option( ShippoWebhookController::OPT_HMAC_SECRET, '' ) ? '' : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
-						<p class="description"><?php esc_html_e( 'Never rendered back into this page. Only set this after Shippo support has confirmed HMAC signing is enabled for your account.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Tracking webhook security', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Shippo tracking updates are delivered to the URL below (registered automatically). The URL token is the default, self-service security check; the IP allowlist and HMAC secret are optional extra layers — HMAC requires requesting setup from Shippo support first.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><?php esc_html_e( 'Webhook URL', 'blt-surecart-extensions' ); ?></div>
+						<div><code class="blt-redirect-uri"><?php echo esc_html( ShippoWebhookController::callback_url() ); ?></code></div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><?php esc_html_e( 'IP allowlist', 'blt-surecart-extensions' ); ?></div>
+						<div>
+							<label class="blt-toggle">
+								<input type="checkbox" name="webhook_ip_allowlist" value="1" <?php checked( (bool) get_option( ShippoWebhookController::OPT_IP_ALLOWLIST_ENABLED, false ) ); ?> />
+								<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+								<span class="blt-toggle-text">
+									<span class="blt-toggle-label"><?php esc_html_e( 'Also require a published Shippo source IP', 'blt-surecart-extensions' ); ?></span>
+									<span class="blt-toggle-desc"><?php esc_html_e( 'Leave off if this site sits behind a proxy/CDN that obscures the real source IP.', 'blt-surecart-extensions' ); ?></span>
+								</span>
+							</label>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="webhook_hmac_secret"><?php esc_html_e( 'HMAC shared secret', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="password" autocomplete="new-password" name="webhook_hmac_secret" id="webhook_hmac_secret" class="regular-text" value="" placeholder="<?php echo '' === get_option( ShippoWebhookController::OPT_HMAC_SECRET, '' ) ? '' : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Never rendered back into this page. Only set this after Shippo support has confirmed HMAC signing is enabled for your account.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<?php submit_button(); ?>
+			<div class="blt-settings-footer">
+				<?php submit_button( null, 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}
@@ -397,8 +442,11 @@ final class SettingsPage {
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="parcels" />
 
-			<h2><?php esc_html_e( 'Parcel definitions', 'blt-surecart-extensions' ); ?></h2>
-			<p class="description"><?php esc_html_e( 'One parcel per order (v1). Weight should reflect the fully packed parcel, not just the empty box.', 'blt-surecart-extensions' ); ?></p>
+			<div class="blt-card">
+			<div class="blt-card-header">
+				<h2><?php esc_html_e( 'Parcel definitions', 'blt-surecart-extensions' ); ?></h2>
+				<p><?php esc_html_e( 'One parcel per order (v1). Weight should reflect the fully packed parcel, not just the empty box.', 'blt-surecart-extensions' ); ?></p>
+			</div>
 			<table class="widefat">
 				<thead><tr>
 					<th><?php esc_html_e( 'Remove', 'blt-surecart-extensions' ); ?></th>
@@ -467,18 +515,26 @@ final class SettingsPage {
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+			<div class="blt-card-body">
+				<div class="blt-field">
+					<div class="blt-field-label"><label for="blt_sce_default_parcel"><?php esc_html_e( 'Default parcel', 'blt-surecart-extensions' ); ?></label></div>
+					<div>
+						<select name="default_parcel" id="blt_sce_default_parcel">
+							<option value=""><?php esc_html_e( '— none (unmapped SKUs go to review) —', 'blt-surecart-extensions' ); ?></option>
+							<?php foreach ( $parcels as $id => $parcel ) : ?>
+								<option value="<?php echo esc_attr( $id ); ?>" <?php selected( $default, $id ); ?>><?php echo esc_html( isset( $parcel['name'] ) ? $parcel['name'] : $id ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</div>
+				</div>
+			</div>
+			</div>
 
-			<h2><?php esc_html_e( 'Default parcel', 'blt-surecart-extensions' ); ?></h2>
-			<p>
-				<select name="default_parcel">
-					<option value=""><?php esc_html_e( '— none (unmapped SKUs go to review) —', 'blt-surecart-extensions' ); ?></option>
-					<?php foreach ( $parcels as $id => $parcel ) : ?>
-						<option value="<?php echo esc_attr( $id ); ?>" <?php selected( $default, $id ); ?>><?php echo esc_html( isset( $parcel['name'] ) ? $parcel['name'] : $id ); ?></option>
-					<?php endforeach; ?>
-				</select>
-			</p>
-
-			<h2><?php esc_html_e( 'SKU → parcel mapping', 'blt-surecart-extensions' ); ?></h2>
+			<div class="blt-card">
+			<div class="blt-card-header">
+				<h2><?php esc_html_e( 'SKU → parcel mapping', 'blt-surecart-extensions' ); ?></h2>
+				<p><?php esc_html_e( 'A SKU with no mapping falls back to the default parcel above.', 'blt-surecart-extensions' ); ?></p>
+			</div>
 			<table class="widefat">
 				<thead><tr>
 					<th><?php esc_html_e( 'Remove', 'blt-surecart-extensions' ); ?></th>
@@ -517,8 +573,11 @@ final class SettingsPage {
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+			</div>
 
-			<?php submit_button(); ?>
+			<div class="blt-settings-footer">
+				<?php submit_button( null, 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}
@@ -596,28 +655,36 @@ final class SettingsPage {
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="rules" />
 
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Selection strategy', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<select name="strategy">
-							<?php foreach ( ServiceSelector::strategies() as $key => $label ) : ?>
-								<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $rules['strategy'], $key ); ?>><?php echo esc_html( $label ); ?></option>
-							<?php endforeach; ?>
-						</select>
-						<p class="description"><?php esc_html_e( '"Cheapest"/"Fastest" apply among the allowed service tokens below (if any are listed); "Priority order" always picks the first allowed token that a rate exists for, regardless of price/speed.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="allowed_tokens"><?php esc_html_e( 'Allowed service tokens (priority order, one per line)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<textarea name="allowed_tokens" id="allowed_tokens" rows="6" class="large-text code"><?php echo esc_textarea( implode( "\n", $rules['allowed_tokens'] ) ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'Shippo servicelevel tokens, e.g. usps_priority. Leave blank to consider every service Shippo returns a rate for.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Service rules', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Which Shippo service a quoted rate is chosen from.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="blt_sce_strategy"><?php esc_html_e( 'Selection strategy', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<select name="strategy" id="blt_sce_strategy">
+								<?php foreach ( ServiceSelector::strategies() as $key => $label ) : ?>
+									<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $rules['strategy'], $key ); ?>><?php echo esc_html( $label ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="blt-field-desc"><?php esc_html_e( '"Cheapest"/"Fastest" apply among the allowed service tokens below (if any are listed); "Priority order" always picks the first allowed token that a rate exists for, regardless of price/speed.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="allowed_tokens"><?php esc_html_e( 'Allowed service tokens (priority order, one per line)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<textarea name="allowed_tokens" id="allowed_tokens" rows="6" class="large-text code"><?php echo esc_textarea( implode( "\n", $rules['allowed_tokens'] ) ); ?></textarea>
+							<p class="blt-field-desc"><?php esc_html_e( 'Shippo servicelevel tokens, e.g. usps_priority. Leave blank to consider every service Shippo returns a rate for.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<?php submit_button(); ?>
+			<div class="blt-settings-footer">
+				<?php submit_button( null, 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}
@@ -662,40 +729,52 @@ final class SettingsPage {
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="guardrails" />
 
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="ceiling_cents"><?php esc_html_e( 'Absolute rate ceiling (USD)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="0" step="0.01" name="ceiling_dollars" id="ceiling_cents" value="<?php echo esc_attr( number_format( $ceiling_cents / 100, 2, '.', '' ) ); ?>" class="regular-text" />
-						<p class="description"><?php esc_html_e( 'A quoted rate above this is held for review. 0 disables this check.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="ceiling_percent"><?php esc_html_e( 'Rate ceiling (% of order total)', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="number" min="0" step="0.1" name="ceiling_percent" id="ceiling_percent" value="<?php echo esc_attr( $ceiling_percent ); ?>" class="regular-text" />
-						<p class="description"><?php esc_html_e( 'A quoted rate above this percentage of the order total is held for review. 0 disables this check.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="countries"><?php esc_html_e( 'Allowed destination countries', 'blt-surecart-extensions' ); ?></label></th>
-					<td>
-						<input type="text" name="countries" id="countries" value="<?php echo esc_attr( implode( ', ', $countries ) ); ?>" class="regular-text" />
-						<p class="description"><?php esc_html_e( 'Comma-separated ISO 3166-1 alpha-2 codes, e.g. US, CA. Leave blank to allow all countries.', 'blt-surecart-extensions' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Military addresses', 'blt-surecart-extensions' ); ?></th>
-					<td>
-						<label>
-							<input type="checkbox" name="allow_military" value="1" <?php checked( $allow_military ); ?> />
-							<?php esc_html_e( 'Allow auto-purchase for APO/FPO/DPO destinations.', 'blt-surecart-extensions' ); ?>
-						</label>
-					</td>
-				</tr>
-			</table>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Guardrails', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'A quote that trips any of these is held in the Review Queue instead of being purchased.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="ceiling_cents"><?php esc_html_e( 'Absolute rate ceiling (USD)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="0" step="0.01" name="ceiling_dollars" id="ceiling_cents" value="<?php echo esc_attr( number_format( $ceiling_cents / 100, 2, '.', '' ) ); ?>" class="regular-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'A quoted rate above this is held for review. 0 disables this check.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="ceiling_percent"><?php esc_html_e( 'Rate ceiling (% of order total)', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="number" min="0" step="0.1" name="ceiling_percent" id="ceiling_percent" value="<?php echo esc_attr( $ceiling_percent ); ?>" class="regular-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'A quoted rate above this percentage of the order total is held for review. 0 disables this check.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><label for="countries"><?php esc_html_e( 'Allowed destination countries', 'blt-surecart-extensions' ); ?></label></div>
+						<div>
+							<input type="text" name="countries" id="countries" value="<?php echo esc_attr( implode( ', ', $countries ) ); ?>" class="regular-text" />
+							<p class="blt-field-desc"><?php esc_html_e( 'Comma-separated ISO 3166-1 alpha-2 codes, e.g. US, CA. Leave blank to allow all countries.', 'blt-surecart-extensions' ); ?></p>
+						</div>
+					</div>
+					<div class="blt-field">
+						<div class="blt-field-label"><?php esc_html_e( 'Military addresses', 'blt-surecart-extensions' ); ?></div>
+						<div>
+							<label class="blt-toggle">
+								<input type="checkbox" name="allow_military" value="1" <?php checked( $allow_military ); ?> />
+								<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+								<span class="blt-toggle-text">
+									<span class="blt-toggle-label"><?php esc_html_e( 'Allow APO/FPO/DPO destinations', 'blt-surecart-extensions' ); ?></span>
+									<span class="blt-toggle-desc"><?php esc_html_e( 'Off by default — military addresses are held for review instead of auto-purchased.', 'blt-surecart-extensions' ); ?></span>
+								</span>
+							</label>
+						</div>
+					</div>
+				</div>
+			</div>
 
-			<?php submit_button(); ?>
+			<div class="blt-settings-footer">
+				<?php submit_button( null, 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}
@@ -733,30 +812,55 @@ final class SettingsPage {
 	private function render_export_tab() {
 		$export = wp_json_encode( $this->exportable_config(), JSON_PRETTY_PRINT );
 		?>
-		<h2><?php esc_html_e( 'Export', 'blt-surecart-extensions' ); ?></h2>
-		<p class="description"><?php esc_html_e( 'Copy this and paste it into the Import box on another site. The Shippo API token is never included — enter it separately on each site.', 'blt-surecart-extensions' ); ?></p>
-		<textarea readonly rows="16" class="large-text code" onclick="this.select();"><?php echo esc_textarea( $export ); ?></textarea>
+		<div class="blt-card">
+			<div class="blt-card-header">
+				<h2><?php esc_html_e( 'Export', 'blt-surecart-extensions' ); ?></h2>
+				<p><?php esc_html_e( 'Copy this and paste it into the Import box on another site. The Shippo API token is never included — enter it separately on each site.', 'blt-surecart-extensions' ); ?></p>
+			</div>
+			<div class="blt-card-body">
+				<textarea readonly rows="16" class="large-text code" onclick="this.select();"><?php echo esc_textarea( $export ); ?></textarea>
+			</div>
+		</div>
 
-		<h2><?php esc_html_e( 'Import', 'blt-surecart-extensions' ); ?></h2>
 		<form method="post">
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="import" />
-			<textarea name="import_json" rows="16" class="large-text code" placeholder="<?php esc_attr_e( 'Paste exported JSON here', 'blt-surecart-extensions' ); ?>"></textarea>
-			<?php submit_button( __( 'Import', 'blt-surecart-extensions' ) ); ?>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Import', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'Paste a configuration exported from another site to replicate it here.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<textarea name="import_json" rows="16" class="large-text code" placeholder="<?php esc_attr_e( 'Paste exported JSON here', 'blt-surecart-extensions' ); ?>"></textarea>
+				</div>
+			</div>
+			<div class="blt-settings-footer">
+				<?php submit_button( __( 'Import', 'blt-surecart-extensions' ), 'primary blt-save-button', 'submit', false ); ?>
+			</div>
 		</form>
 
-		<h2><?php esc_html_e( 'Danger zone', 'blt-surecart-extensions' ); ?></h2>
 		<form method="post">
 			<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 			<input type="hidden" name="blt_sce_settings_tab" value="uninstall" />
-			<p>
-				<label>
-					<input type="checkbox" name="delete_on_uninstall" value="1" <?php checked( (bool) get_option( self::OPT_DELETE_ON_UNINSTALL, false ) ); ?> />
-					<?php esc_html_e( 'Delete all shipment history and settings when this plugin is uninstalled.', 'blt-surecart-extensions' ); ?>
-				</label>
-				<p class="description"><?php esc_html_e( 'Off by default — uninstalling the plugin normally leaves your fulfillment history and settings in the database untouched, in case you reinstall it.', 'blt-surecart-extensions' ); ?></p>
-			</p>
-			<?php submit_button( __( 'Save', 'blt-surecart-extensions' ), 'delete' ); ?>
+			<div class="blt-card">
+				<div class="blt-card-header">
+					<h2><?php esc_html_e( 'Danger zone', 'blt-surecart-extensions' ); ?></h2>
+					<p><?php esc_html_e( 'What happens to your data if this plugin is deleted.', 'blt-surecart-extensions' ); ?></p>
+				</div>
+				<div class="blt-card-body">
+					<label class="blt-toggle">
+						<input type="checkbox" name="delete_on_uninstall" value="1" <?php checked( (bool) get_option( self::OPT_DELETE_ON_UNINSTALL, false ) ); ?> />
+						<span class="blt-toggle-track" aria-hidden="true"><span class="blt-toggle-thumb"></span></span>
+						<span class="blt-toggle-text">
+							<span class="blt-toggle-label"><?php esc_html_e( 'Delete all shipment history and settings on uninstall', 'blt-surecart-extensions' ); ?></span>
+							<span class="blt-toggle-desc"><?php esc_html_e( 'Off by default — uninstalling the plugin normally leaves your fulfillment history and settings in the database untouched, in case you reinstall it.', 'blt-surecart-extensions' ); ?></span>
+						</span>
+					</label>
+				</div>
+			</div>
+			<div class="blt-settings-footer">
+				<?php submit_button( __( 'Save', 'blt-surecart-extensions' ), 'delete', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}
