@@ -95,6 +95,7 @@ final class Plugin {
 		// here changes again.
 		if ( is_admin() ) {
 			( new Admin\ModulesPage( $this->modules ) )->hooks();
+			Admin\Assets::hooks();
 			UpdateChecker::init();
 		}
 

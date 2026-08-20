@@ -90,4 +90,31 @@ final class OfferPostType {
 
 		return isset( $statuses[ $status ] ) ? $statuses[ $status ] : $status;
 	}
+
+	/**
+	 * The BLT design-system badge class for one status.
+	 *
+	 * Presentation only — .blt-badge variants are deliberately not scoped to
+	 * .blt-ui so they also read correctly inside a native list table.
+	 *
+	 * @param string $status Status key.
+	 * @return string
+	 */
+	public static function status_badge_class( $status ) {
+		switch ( $status ) {
+			case self::STATUS_ACCEPTED:
+				return 'blt-badge-confirmed';
+
+			case self::STATUS_PENDING:
+			case self::STATUS_COUNTERED:
+				return 'blt-badge-pending';
+
+			case self::STATUS_DECLINED:
+			case self::STATUS_CANCELLED:
+				return 'blt-badge-cancelled';
+
+			default:
+				return 'blt-badge-off';
+		}
+	}
 }

@@ -97,8 +97,25 @@ final class Settings {
 	}
 
 	/**
-	 * The active Stripe secret key — constant first, then the option.
+	 * The active Stripe secret key — constant first, then the option, then
+	 * the shared BLT store.
+	 *
 	 * Never exposed to the browser; only ever read server-side.
+	 *
+	 * The shared-store fallback lives in these named accessors rather than in
+	 * get()/all() on purpose. all() caches the option array for the request,
+	 * and folding a shared value into that cache would make it look like part
+	 * of this plugin's own saved settings — which the settings screen renders
+	 * from, and save() writes back. Resolving here keeps the cache holding
+	 * only what is actually stored in `sc_make_an_offer_settings`.
+	 *
+	 * The gate matters here more than anywhere else in this plugin: these
+	 * three values feed Module::unmet_requirements(), which decides whether
+	 * Make an Offer boots at all, and Api\StripeClient, which spends money.
+	 * BLT_Family::get() is opt-in and defaults OFF precisely so that
+	 * installing a second BLT plugin can never wake a dormant payment path —
+	 * an admin who blanked a Stripe secret key to stop taking payments must
+	 * not silently inherit a live one.
 	 *
 	 * @return string
 	 */
@@ -107,16 +124,29 @@ final class Settings {
 			return BLT_SCE_STRIPE_SECRET_KEY;
 		}
 
-		return (string) self::get( 'stripe_secret_key' );
+		$key = (string) self::get( 'stripe_secret_key' );
+
+		if ( '' === $key && class_exists( 'BLT_Family' ) ) {
+			$key = (string) \BLT_Family::get( 'blt-surecart-extensions', 'stripe', 'secret_key' );
+		}
+
+		return $key;
 	}
 
 	/**
-	 * The Stripe publishable key (safe for the browser).
+	 * The Stripe publishable key (safe for the browser), falling back to the
+	 * shared BLT store once this plugin's own setting comes up empty.
 	 *
 	 * @return string
 	 */
 	public static function stripe_publishable_key() {
-		return (string) self::get( 'stripe_publishable_key' );
+		$key = (string) self::get( 'stripe_publishable_key' );
+
+		if ( '' === $key && class_exists( 'BLT_Family' ) ) {
+			$key = (string) \BLT_Family::get( 'blt-surecart-extensions', 'stripe', 'publishable_key' );
+		}
+
+		return $key;
 	}
 
 	/**
@@ -148,7 +178,9 @@ final class Settings {
 	}
 
 	/**
-	 * The active SureCart API token — constant first, then the option.
+	 * The active SureCart API token — constant first, then the option, then
+	 * the shared BLT store.
+	 *
 	 * Never exposed to the browser; only ever read server-side.
 	 *
 	 * @return string
@@ -158,7 +190,13 @@ final class Settings {
 			return BLT_SCE_SURECART_API_TOKEN;
 		}
 
-		return (string) self::get( 'surecart_api_token' );
+		$token = (string) self::get( 'surecart_api_token' );
+
+		if ( '' === $token && class_exists( 'BLT_Family' ) ) {
+			$token = (string) \BLT_Family::get( 'blt-surecart-extensions', 'surecart', 'api_token' );
+		}
+
+		return $token;
 	}
 
 	/**

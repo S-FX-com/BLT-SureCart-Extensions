@@ -4,7 +4,7 @@ Tags: surecart, shipping, shippo, fulfillment, ecommerce, reports
 Requires at least: 6.4
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.2
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Requires Plugins: surecart
@@ -13,7 +13,7 @@ Umbrella extension plugin adding modular capabilities to SureCart. Modules: Ship
 
 == Description ==
 
-BLT SureCart Extensions is a private plugin by S-FX.com Small Business Solutions, built for deployment across multiple SureCart-powered client sites. It is not distributed via the WordPress.org plugin directory; updates are delivered from private GitHub Releases.
+BLT SureCart Extensions is a private plugin by S-FX.com, built for deployment across multiple SureCart-powered client sites. It is not distributed via the WordPress.org plugin directory; updates are delivered from private GitHub Releases.
 
 Each module is independently toggleable from **SC Extensions → Modules**. Enabling a module exposes its own admin screen(s) under the SC Extensions menu; disabling it removes every hook the module registers.
 
@@ -82,6 +82,13 @@ The purchase job retries with exponential backoff, up to 5 attempts, then marks 
 A reconciliation sweep re-checks any shipment stuck in a non-terminal status every 15 minutes (configurable threshold, default 6 hours before a shipment is considered "stuck").
 
 == Changelog ==
+
+= 0.4.0 =
+* Every admin screen under SC Extensions now uses the shared BLT design system: a consistent page header with the BLT mark, cards, field rows, toggle switches and status badges in place of the old WordPress form tables and coloured dashicons. Presentation only — no setting, form field, action or capability check changed.
+* The SC Extensions menu now shows the BLT mark instead of a generic dashicon, and lights up on hover the way core menu icons do.
+* Update checks are now held to at most one a day, anchored to midnight site time. "Check for Updates" still runs immediately, and there is now a link for it on the Modules screen alongside the time of the last check.
+* BLT plugin cards on Dashboard -> Updates and Plugins now carry the BLT mark instead of WordPress's generic placeholder.
+* New: a site running two or more BLT plugins can enter a shared GitHub token, Stripe keys or SureCart API token once, on the BLT screen, instead of once per plugin. This is strictly opt-in per plugin and per credential group, and defaults to off — a wp-config.php constant still wins, then this plugin's own setting, and only then the shared value. Nothing changes on an existing site until you opt in.
 
 = 0.3.2 =
 * Fixed: fulfillment reports completed with zero customers and zero items on a store that has orders, and the product picker stayed empty. The list wrapper SureCart returns for a page of records (its Collection class) answers isset() with "absent" for every attribute while the data is really there, so a fully populated response read as empty, with no error. All reads of SureCart data now go through a safe accessor that doesn't rely on isset().

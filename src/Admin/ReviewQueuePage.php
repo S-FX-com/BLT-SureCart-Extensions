@@ -97,6 +97,13 @@ final class ReviewQueuePage {
 			exit;
 		}
 
+		echo '<div class="wrap blt-ui blt-sce-review-queue-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'Review Queue', 'blt-surecart-extensions' );
+		echo '</h1></div>';
+
 		if ( isset( $_GET['blt_sce_error'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			printf( '<div class="notice notice-error"><p>%s</p></div>', esc_html( sanitize_text_field( wp_unslash( $_GET['blt_sce_error'] ) ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		} elseif ( isset( $_GET['blt_sce_purchased'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -114,11 +121,16 @@ final class ReviewQueuePage {
 			)
 		);
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'Review Queue', 'blt-surecart-extensions' ) . '</h1>';
-		echo '<p class="description">' . esc_html__( 'Orders held for a guardrail reason, or quoted and waiting because auto-purchase is off.', 'blt-surecart-extensions' ) . '</p>';
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-header"><h2>' . esc_html__( 'Held shipments', 'blt-surecart-extensions' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Orders held for a guardrail reason, or quoted and waiting because auto-purchase is off.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div>';
 
 		if ( empty( $result['rows'] ) ) {
-			echo '<p>' . esc_html__( 'Nothing waiting for review.', 'blt-surecart-extensions' ) . '</p></div>';
+			echo '<div class="blt-card-body"><div class="blt-empty">';
+			echo '<span class="blt-empty-title">' . esc_html__( 'Nothing waiting for review', 'blt-surecart-extensions' ) . '</span>';
+			echo '<span>' . esc_html__( 'Held and awaiting-purchase shipments show up here.', 'blt-surecart-extensions' ) . '</span>';
+			echo '</div></div></div></div>';
 			return;
 		}
 
@@ -145,13 +157,13 @@ final class ReviewQueuePage {
 
 			echo '<tr>';
 			echo '<td>' . esc_html( $row->surecart_order_id ) . '</td>';
-			echo '<td>' . esc_html( ucwords( str_replace( '_', ' ', $row->status ) ) ) . '</td>';
-			echo '<td>' . ( $row->last_error ? esc_html( $row->last_error ) : '&#8212;' ) . '</td>';
+			echo '<td><span class="blt-badge blt-badge-pending">' . esc_html( ucwords( str_replace( '_', ' ', $row->status ) ) ) . '</span></td>';
+			echo '<td>' . ( $row->last_error ? '<span class="blt-text-danger">' . esc_html( $row->last_error ) . '</span>' : '&#8212;' ) . '</td>';
 			echo '<td>' . esc_html( $row->updated_at ) . '</td>';
 			echo '<td><a class="button button-primary" href="' . esc_url( $purchase_url ) . '">' . esc_html__( 'Purchase now', 'blt-surecart-extensions' ) . '</a></td>';
 			echo '</tr>';
 		}
 
-		echo '</tbody></table></div>';
+		echo '</tbody></table></div></div>';
 	}
 }

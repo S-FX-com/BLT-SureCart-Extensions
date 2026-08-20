@@ -4,7 +4,7 @@ Guidance for Claude Code (or any AI agent) working in this repository.
 
 ## What this is
 
-**BLT SureCart Extensions** — an umbrella extension plugin for SureCart (a WordPress e-commerce plugin), built by S-FX.com Small Business Solutions for deployment across multiple client sites. Private plugin: distributed via private GitHub Releases + `plugin-update-checker`, never the WordPress.org directory.
+**BLT SureCart Extensions** — an umbrella extension plugin for SureCart (a WordPress e-commerce plugin), built by S-FX.com for deployment across multiple client sites. Private plugin: distributed via private GitHub Releases + `plugin-update-checker`, never the WordPress.org directory.
 
 Slug: `blt-surecart-extensions` · PHP prefix: `blt_sce_` · Text domain: `blt-surecart-extensions` · Namespace: `BLT\SCE`.
 

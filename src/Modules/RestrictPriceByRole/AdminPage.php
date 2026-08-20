@@ -9,6 +9,8 @@
 
 namespace BLT\SCE\Modules\RestrictPriceByRole;
 
+use BLT\SCE\Admin\Assets;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -84,10 +86,13 @@ final class AdminPage {
 			return;
 		}
 
+		// Depends on the shared BLT design system so this screen's own rules
+		// always cascade after the components they refine. Assets::enqueue()
+		// registers that handle for every screen in this plugin.
 		wp_enqueue_style(
 			'blt-sce-rpbr-admin',
 			BLT_SCE_URL . 'assets/restrict-price-by-role/admin.css',
-			array(),
+			array( Assets::HANDLE ),
 			BLT_SCE_VERSION
 		);
 
@@ -167,10 +172,18 @@ final class AdminPage {
 
 		$roles = $this->get_wp_roles();
 		?>
-		<div class="wrap scrpbr-wrap">
-			<h1><?php esc_html_e( 'Restrict Price by User Role', 'blt-surecart-extensions' ); ?></h1>
+		<div class="wrap blt-ui scrpbr-wrap">
+			<div class="blt-admin-page-header">
+				<h1>
+					<?php
+					// Bundled SVG, already run through wp_kses by the brand class.
+					echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					esc_html_e( 'Restrict Price by User Role', 'blt-surecart-extensions' );
+					?>
+				</h1>
+			</div>
 
-			<p class="description">
+			<p class="blt-field-desc">
 				<?php esc_html_e( 'Select which user roles can access each product price. Prices with no roles selected are available to everyone (including guests).', 'blt-surecart-extensions' ); ?>
 			</p>
 
@@ -185,18 +198,20 @@ final class AdminPage {
 				<form id="scrpbr-form">
 					<div id="scrpbr-products-list"></div>
 
-					<p class="submit">
-						<button type="submit" class="button button-primary" id="scrpbr-save-btn">
+					<div class="blt-settings-footer">
+						<button type="submit" class="button button-primary blt-save-button" id="scrpbr-save-btn">
 							<?php esc_html_e( 'Save Restrictions', 'blt-surecart-extensions' ); ?>
 						</button>
-					</p>
+					</div>
 				</form>
 			</div>
 		</div>
 
 		<script type="text/html" id="tmpl-scrpbr-product">
-			<div class="scrpbr-product-card">
-				<h3 class="scrpbr-product-name">{{ data.name }}</h3>
+			<div class="blt-card scrpbr-product-card">
+				<div class="blt-card-header">
+					<h2 class="scrpbr-product-name">{{ data.name }}</h2>
+				</div>
 
 				<table class="widefat scrpbr-price-table">
 					<thead>
@@ -214,7 +229,7 @@ final class AdminPage {
 									<strong>{{ price.name || '<?php echo esc_js( __( 'Default Price', 'blt-surecart-extensions' ) ); ?>' }}</strong><br>
 									<span class="scrpbr-price-amount">{{ price.display_amount }}</span>
 									<# if ( price.recurring ) { #>
-										<span class="scrpbr-recurring-badge"><?php esc_html_e( 'Recurring', 'blt-surecart-extensions' ); ?></span>
+										<span class="blt-badge blt-badge-confirmed"><?php esc_html_e( 'Recurring', 'blt-surecart-extensions' ); ?></span>
 									<# } #>
 								</td>
 

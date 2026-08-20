@@ -9,6 +9,7 @@
 namespace BLT\SCE\Admin;
 
 use BLT\SCE\Modules\ModuleRegistry;
+use BLT\SCE\Support\UpdateChecker;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -64,6 +65,22 @@ final class ModulesPage {
 		// regardless of the order modules happen to be booted in.
 		add_action( 'admin_menu', array( $this, 'register_menu' ), 9 );
 		add_action( 'admin_post_blt_sce_toggle_module', array( $this, 'handle_toggle' ) );
+
+		// Separate hook on purpose: WordPress paints an SVG icon_url as a
+		// CSS background image and never recolours it, so the BLT mark needs
+		// a filter rule to brighten on hover the way a dashicon does. This
+		// runs on admin_head and touches no menu registration, so the
+		// admin_menu priority 9 above stays exactly as it is.
+		add_action( 'admin_head', array( $this, 'print_menu_icon_style' ) );
+	}
+
+	/**
+	 * Light the BLT menu mark up on hover / while the section is open.
+	 *
+	 * @return void
+	 */
+	public function print_menu_icon_style() {
+		\BLT_Family_Brand::print_menu_icon_style( 'blt-sce-modules' );
 	}
 
 	/**
@@ -78,7 +95,7 @@ final class ModulesPage {
 			self::CAPABILITY,
 			'blt-sce-modules',
 			array( $this, 'render' ),
-			'dashicons-networking'
+			\BLT_Family_Brand::menu_icon( BLT_SCE_PATH, 'dashicons-networking' )
 		);
 
 		add_submenu_page(
@@ -125,7 +142,21 @@ final class ModulesPage {
 			return;
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__( 'BLT SureCart Extensions — Modules', 'blt-surecart-extensions' ) . '</h1>';
+		echo '<div class="wrap blt-ui blt-sce-modules-page">';
+
+		echo '<div class="blt-admin-page-header"><h1>';
+		echo \BLT_Family_Brand::inline_mark( BLT_SCE_PATH ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Bundled SVG, already run through wp_kses by the brand class.
+		echo esc_html__( 'BLT SureCart Extensions', 'blt-surecart-extensions' );
+		echo ' <span class="blt-admin-page-header-sub">' . esc_html__( 'Modules', 'blt-surecart-extensions' ) . '</span>';
+		echo '</h1>';
+		$this->render_update_actions();
+		echo '</div>';
+
+		echo '<div class="blt-card">';
+		echo '<div class="blt-card-header"><h2>' . esc_html__( 'Modules', 'blt-surecart-extensions' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Each module is independently toggleable. Enabling one exposes its own screens under this menu; disabling it removes every hook it registers.', 'blt-surecart-extensions' ) . '</p>';
+		echo '</div>';
+
 		echo '<table class="widefat striped"><thead><tr>';
 		echo '<th>' . esc_html__( 'Module', 'blt-surecart-extensions' ) . '</th>';
 		echo '<th>' . esc_html__( 'Status', 'blt-surecart-extensions' ) . '</th>';
@@ -143,15 +174,15 @@ final class ModulesPage {
 
 			echo '<td>';
 			if ( ! $enabled ) {
-				echo '<span class="dashicons dashicons-marker" style="color:#999"></span> ' . esc_html__( 'Disabled', 'blt-surecart-extensions' );
+				echo '<span class="blt-badge blt-badge-off">' . esc_html__( 'Disabled', 'blt-surecart-extensions' ) . '</span>';
 			} elseif ( $booted ) {
-				echo '<span class="dashicons dashicons-yes" style="color:#46b450"></span> ' . esc_html__( 'Active', 'blt-surecart-extensions' );
+				echo '<span class="blt-badge blt-badge-on">' . esc_html__( 'Active', 'blt-surecart-extensions' ) . '</span>';
 			} else {
-				echo '<span class="dashicons dashicons-warning" style="color:#dc3232"></span> ' . esc_html__( 'Enabled, but not running', 'blt-surecart-extensions' );
+				echo '<span class="blt-badge blt-badge-cancelled">' . esc_html__( 'Enabled, but not running', 'blt-surecart-extensions' ) . '</span>';
 			}
 
 			if ( ! empty( $unmet ) ) {
-				echo '<ul style="color:#dc3232;margin:.5em 0 0 1.2em;list-style:disc;">';
+				echo '<ul class="blt-error-list blt-text-danger">';
 				foreach ( $unmet as $reason ) {
 					echo '<li>' . esc_html( $reason ) . '</li>';
 				}
@@ -171,6 +202,49 @@ final class ModulesPage {
 			echo '</tr>';
 		}
 
-		echo '</tbody></table></div>';
+		echo '</tbody></table></div></div>';
+	}
+
+	/**
+	 * The update actions in the page header.
+	 *
+	 * "Check for Updates" is the same nonced request as the link on the
+	 * Plugins row, surfaced here so a site owner doesn't have to go hunting
+	 * for it. It bypasses the family's once-a-day floor because it is an
+	 * explicit human request; the automatic check runs once a day at
+	 * midnight site time.
+	 *
+	 * @return void
+	 */
+	private function render_update_actions() {
+		$checker = UpdateChecker::checker();
+
+		// No checker means plugin-update-checker never loaded, so nothing
+		// would handle the request — don't offer a link that does nothing.
+		if ( null === $checker ) {
+			return;
+		}
+
+		echo '<div class="blt-admin-page-actions">';
+
+		$last_check = \BLT_Family_Updates::last_check_time( $checker );
+
+		if ( $last_check > 0 ) {
+			echo '<span class="blt-admin-page-header-meta">';
+			printf(
+				/* translators: %s: human-readable time difference, e.g. "2 hours" */
+				esc_html__( 'Last checked for updates %s ago', 'blt-surecart-extensions' ),
+				esc_html( human_time_diff( $last_check, time() ) )
+			);
+			echo '</span>';
+		}
+
+		printf(
+			'<a class="button" href="%s">%s</a>',
+			esc_url( \BLT_Family_Updates::check_now_url( UpdateChecker::SLUG ) ),
+			esc_html__( 'Check for Updates', 'blt-surecart-extensions' )
+		);
+
+		echo '</div>';
 	}
 }
