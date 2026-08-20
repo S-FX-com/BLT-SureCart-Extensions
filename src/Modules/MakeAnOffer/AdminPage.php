@@ -536,6 +536,16 @@ final class AdminPage {
 							<?php else : ?>
 								<input type="password" autocomplete="new-password" name="stripe_secret_key" id="stripe_secret_key" class="regular-text" value="" placeholder="<?php echo '' === $settings['stripe_secret_key'] ? esc_attr__( 'sk_test_… / sk_live_…', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
 								<p class="blt-field-desc"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_STRIPE_SECRET_KEY in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+								<?php if ( '' !== $settings['stripe_secret_key'] ) : ?>
+									<p class="blt-field-desc">
+										<label>
+											<input type="checkbox" name="stripe_secret_key_clear" value="1" />
+											<?php esc_html_e( 'Clear the saved key', 'blt-surecart-extensions' ); ?>
+										</label>
+										<br />
+										<?php esc_html_e( 'Only needed to hand this over to a shared BLT credential: this module\'s own key always wins, so the shared one applies only once nothing is stored here.', 'blt-surecart-extensions' ); ?>
+									</p>
+								<?php endif; ?>
 							<?php endif; ?>
 						</div>
 					</div>
@@ -582,6 +592,16 @@ final class AdminPage {
 							<?php else : ?>
 								<input type="password" autocomplete="new-password" name="surecart_api_token" id="surecart_api_token" class="regular-text" value="" placeholder="<?php echo '' === $settings['surecart_api_token'] ? esc_attr__( 'Created in the SureCart dashboard under API Tokens', 'blt-surecart-extensions' ) : esc_attr__( 'Currently set — leave blank to keep it', 'blt-surecart-extensions' ); ?>" />
 								<p class="blt-field-desc"><?php esc_html_e( 'Stored server-side only; never rendered back into this page. For production, prefer defining BLT_SCE_SURECART_API_TOKEN in wp-config.php instead.', 'blt-surecart-extensions' ); ?></p>
+								<?php if ( '' !== $settings['surecart_api_token'] ) : ?>
+									<p class="blt-field-desc">
+										<label>
+											<input type="checkbox" name="surecart_api_token_clear" value="1" />
+											<?php esc_html_e( 'Clear the saved token', 'blt-surecart-extensions' ); ?>
+										</label>
+										<br />
+										<?php esc_html_e( 'Only needed to hand this over to a shared BLT credential: this module\'s own token always wins, so the shared one applies only once nothing is stored here.', 'blt-surecart-extensions' ); ?>
+									</p>
+								<?php endif; ?>
 							<?php endif; ?>
 						</div>
 					</div>
@@ -628,13 +648,29 @@ final class AdminPage {
 			'record_sc_order'        => ! empty( $_POST['record_sc_order'] ),
 		);
 
-		// Like the Shippo token: blank means "keep the current secret."
-		if ( ! Settings::secret_key_is_constant_defined() && ! empty( $_POST['stripe_secret_key'] ) ) {
-			$values['stripe_secret_key'] = sanitize_text_field( wp_unslash( $_POST['stripe_secret_key'] ) );
+		/*
+		 * Like the Shippo token: blank means "keep the current secret", so the
+		 * value never has to be rendered back into the page. The companion
+		 * _clear checkbox is the only way to empty one — needed to hand a
+		 * credential over to the shared BLT store, since this module's own
+		 * value always wins and the shared one applies only once nothing is
+		 * stored here. A wp-config constant outranks both, so neither branch
+		 * runs while one is defined.
+		 */
+		if ( ! Settings::secret_key_is_constant_defined() ) {
+			if ( ! empty( $_POST['stripe_secret_key'] ) ) {
+				$values['stripe_secret_key'] = sanitize_text_field( wp_unslash( $_POST['stripe_secret_key'] ) );
+			} elseif ( ! empty( $_POST['stripe_secret_key_clear'] ) ) {
+				$values['stripe_secret_key'] = '';
+			}
 		}
 
-		if ( ! Settings::sc_token_is_constant_defined() && ! empty( $_POST['surecart_api_token'] ) ) {
-			$values['surecart_api_token'] = sanitize_text_field( wp_unslash( $_POST['surecart_api_token'] ) );
+		if ( ! Settings::sc_token_is_constant_defined() ) {
+			if ( ! empty( $_POST['surecart_api_token'] ) ) {
+				$values['surecart_api_token'] = sanitize_text_field( wp_unslash( $_POST['surecart_api_token'] ) );
+			} elseif ( ! empty( $_POST['surecart_api_token_clear'] ) ) {
+				$values['surecart_api_token'] = '';
+			}
 		}
 
 		Settings::save( $values );
